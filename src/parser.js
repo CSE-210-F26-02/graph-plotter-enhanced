@@ -1,5 +1,13 @@
-// Turns CSV text into an array of rows (each row is an array of strings).
-// Handles quoted fields, commas inside quotes, and Windows line endings.
+/**
+ * Parses CSV text into an array of rows.
+ * Each row is an array of strings.
+ * Handles quoted fields, commas inside quotes, and Windows line endings.
+ * 
+ * @todo Needs fix on edge case where forgetting to end a quoted field causes the parser to hang or produce incorrect results.
+ * 
+ * @param {string} text - The CSV text to parse.
+ * @returns {string[][]} An array of rows, each row being an array of strings.
+ */
 function parseCSV(text) {
   if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // remove BOM
   const out = [];
