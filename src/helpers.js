@@ -26,4 +26,20 @@ function niceTicks(min, max, count = 6) {
  */
 const fmt = v => String(+v.toPrecision(5));
 
-export { niceTicks, fmt };
+/**
+ * Sanitize any string and remove potentially harmful characters or attacks
+ * @param {string} str
+ * @returns {string}
+ */
+function sanitizeInput(str) {
+  
+    const entities = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+  };
+
+  return String(str).replace(/[&<>]/g, match => entities[match]);
+}
+
+export { niceTicks, fmt, sanitizeInput };

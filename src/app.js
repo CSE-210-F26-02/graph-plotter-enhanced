@@ -1,5 +1,6 @@
 import { clearChart, draw, getNumberOfPointsPlotted } from './chart.js';
 import { InvalidFileError, NoDataFoundError, NotEnoughColumnsError } from './errors.js';
+import { sanitizeInput } from './helpers.js';
 
 const $ = id => document.getElementById(id);
 const cv = $('cv')
@@ -24,7 +25,7 @@ function load(text, name) {
     if (all.length < 2) {
       throw new NoDataFoundError('No data rows found.');
     }
-    headers = all[0].map((h, i) => h.trim() || 'col' + (i + 1));
+    headers = all[0].map((h, i) => sanitizeInput(h).trim() || 'col' + (i + 1));
     rows = all.slice(1);
     fileName = name;
 
@@ -37,9 +38,13 @@ function load(text, name) {
       throw new NotEnoughColumnsError('Need at least two numeric columns.');
     }
 
-    const options = numeric.map(j => `<option value="${j}">${headers[j]}</option>`).join('');
-    $('xs').innerHTML = options;
-    $('ys').innerHTML = options;
+    const options = numeric.map(j => new Option(headers[j], j));
+    $('xs').innerHTML = '';
+    $('ys').innerHTML = '';
+    options.forEach(option => {
+      $('xs').add(option.cloneNode(true));
+      $('ys').add(option.cloneNode(true));
+    });
     $('xs').value = numeric[0];
     $('ys').value = numeric[1];
     drawGraph();
