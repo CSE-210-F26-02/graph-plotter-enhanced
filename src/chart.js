@@ -50,6 +50,7 @@ function draw(rows, headers,xs = +$('xs').value, ys = +$('ys').value, type = $('
   if (!rows.length) return;
   const xi = xs, yi = ys;
 
+  // Read points from 'rows' into 'pts'
   let pts = [];
   for (const r of rows) {
     const x = Number(r[xi]), y = Number(r[yi]);
@@ -60,6 +61,7 @@ function draw(rows, headers,xs = +$('xs').value, ys = +$('ys').value, type = $('
     return ($('err').textContent = 'No valid numbers in those columns.');
   }
   $('err').textContent = '';
+  // TODO: do we need the if statement?
   if (type === 'line') pts.sort((a, b) => a[0] - b[0]);
 
   // size canvas for sharp rendering on retina screens
@@ -68,68 +70,84 @@ function draw(rows, headers,xs = +$('xs').value, ys = +$('ys').value, type = $('
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
 
-  // Avoid call stack overflow for large datasets by iterating instead of spreading Math.min(...pts)
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  // Find bounding box of charted points (min, max)
+  let x_min = Infinity, x_max = -Infinity, y_min = Infinity, y_max = -Infinity;
   for (let i = 0; i < pts.length; i++) {
     const px = pts[i][0], py = pts[i][1];
-    if (px < x0) x0 = px;
-    if (px > x1) x1 = px;
-    if (py < y0) y0 = py;
-    if (py > y1) y1 = py;
+    if (px < x_min) x_min = px;
+    if (px > x_max) x_max = px;
+    if (py < y_min) y_min = py;
+    if (py > y_max) y_max = py;
   }
-  if (x0 === x1) { x0 -= 1; x1 += 1; }
-  if (y0 === y1) { y0 -= 1; y1 += 1; }
-  const padX = (x1 - x0) * 0.04, padY = (y1 - y0) * 0.06;
-  x0 -= padX; x1 += padX; y0 -= padY; y1 += padY;
+  if (x_min === x_max) { x_min -= 1; x_max += 1; }
+  if (y_min === y_max) { y_min -= 1; y_max += 1; }
+  const padX = (x_max - x_min) * 0.04, padY = (y_max - y_min) * 0.06;
+  x_min -= padX; x_max += padX; y_min -= padY; y_max += padY;
 
   // Calculate dynamic left margin based on Y-axis tick string width to prevent clipping
   ctx.font = '12px system-ui, sans-serif';
-  const yTicks = niceTicks(y0, y1);
+  const yTicks = niceTicks(y_min, y_max);
   let maxYTextWidth = 30;
   for (const t of yTicks) {
     const w = ctx.measureText(fmt(t)).width;
     if (w > maxYTextWidth) maxYTextWidth = w;
   }
-  const L = Math.max(50, Math.ceil(maxYTextWidth + 24));
-  const R = 24, T = $('title').value ? 40 : 20, B = 50;
-  const pw = W - L - R, ph = H - T - B;
 
-  const sx = x => L + (x - x0) / (x1 - x0) * pw;       // data -> pixel
-  const sy = y => T + ph - (y - y0) / (y1 - y0) * ph;
+  // Margin is any blank space outside of axis labels and grid lines
+  const leftMargin = Math.max(50, Math.ceil(maxYTextWidth + 24));
+  const rightMargin = 24;
+  const topMargin = $('title').value ? 40 : 20;
+  const bottomMargin = 50;
+
+  // Dimensions of the plot space in pixels
+  const plotWidth = W - leftMargin - rightMargin;
+  const plotHeight = H - topMargin - bottomMargin;
+
+  // Converts coordinates relative to plot space (in margins) to actual screen positions
+  // Cache vars have all this information, could move them out to their own functions
+  const toScreenX = x => leftMargin + (x - x_min) / (x_max - x_min) * plotWidth;       // data -> pixel
+  const toScreenY = y => topMargin + plotHeight - (y - y_min) / (y_max - y_min) * plotHeight;
 
   // Cache plot geometry for hover tooltip lookups
-  cachedPlot = { pts, sx, sy, xi, yi, L, T, pw, ph, W, H };
+  cachedPlot = { pts, sx: toScreenX, sy: toScreenY, xi, yi, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H };
 
   // grid + tick labels
   ctx.strokeStyle = GRID; ctx.fillStyle = MUTED;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  for (const t of niceTicks(x0, x1)) {
-    ctx.beginPath(); ctx.moveTo(sx(t), T); ctx.lineTo(sx(t), T + ph); ctx.stroke();
-    ctx.fillText(fmt(t), sx(t), T + ph + 6);
+  for (const tickX of niceTicks(x_min, x_max)) {
+    ctx.beginPath(); 
+    ctx.moveTo(toScreenX(tickX), topMargin);
+    ctx.lineTo(toScreenX(tickX), topMargin + plotHeight);
+    ctx.stroke();
+    ctx.fillText(fmt(tickX), toScreenX(tickX), topMargin + plotHeight + 6);
   }
   ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-  for (const t of yTicks) {
-    ctx.beginPath(); ctx.moveTo(L, sy(t)); ctx.lineTo(L + pw, sy(t)); ctx.stroke();
-    ctx.fillText(fmt(t), L - 8, sy(t));
+  for (const tickY of yTicks) {
+    ctx.beginPath(); 
+    ctx.moveTo(leftMargin, toScreenY(tickY));
+    ctx.lineTo(leftMargin + plotWidth, toScreenY(tickY));
+    ctx.stroke();
+    ctx.fillText(fmt(tickY), leftMargin - 8, toScreenY(tickY));
   }
 
+  // Not sure I like axis labels drawn on the canvas, TODO?
   // axis labels and title
   ctx.fillStyle = TEXT; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  ctx.fillText(headers[xi], L + pw / 2, H - 10);
-  ctx.save(); ctx.translate(14, T + ph / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText(headers[xi], leftMargin + plotWidth / 2, H - 10);
+  ctx.save(); ctx.translate(14, topMargin + plotHeight / 2); ctx.rotate(-Math.PI / 2);
   ctx.fillText(headers[yi], 0, 0); ctx.restore();
-  if ($('title').value) { ctx.font = 'bold 15px system-ui, sans-serif'; ctx.fillText($('title').value, L + pw / 2, 24); }
+  if ($('title').value) { ctx.font = 'bold 15px system-ui, sans-serif'; ctx.fillText($('title').value, leftMargin + plotWidth / 2, 24); }
 
   // data
   ctx.fillStyle = COLOR; ctx.strokeStyle = COLOR;
   if (type === 'line') {
     ctx.lineWidth = 2; ctx.beginPath();
-    pts.forEach(([x, y], i) => (i ? ctx.lineTo(sx(x), sy(y)) : ctx.moveTo(sx(x), sy(y))));
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(toScreenX(x), toScreenY(y)) : ctx.moveTo(toScreenX(x), toScreenY(y))));
     ctx.stroke();
   } else {
     ctx.globalAlpha = pts.length > 1000 ? 0.45 : 0.75;
     const r = pts.length > 5000 ? 2 : 4;
-    for (const [x, y] of pts) { ctx.beginPath(); ctx.arc(sx(x), sy(y), r, 0, Math.PI * 2); ctx.fill(); }
+    for (const [x, y] of pts) { ctx.beginPath(); ctx.arc(toScreenX(x), toScreenY(y), r, 0, Math.PI * 2); ctx.fill(); }
     ctx.globalAlpha = 1;
   }
   if (completionHandler) completionHandler();
@@ -150,15 +168,15 @@ cv.addEventListener('mousemove', e => {
     return;
   }
   const rect = cv.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
 
   // Search for the closest point within 10px radius
   let closest = null, minD2 = 100;
   for (let i = 0; i < cachedPlot.pts.length; i++) {
     const p = cachedPlot.pts[i];
     const px = cachedPlot.sx(p[0]), py = cachedPlot.sy(p[1]);
-    const d2 = (mx - px) ** 2 + (my - py) ** 2;
+    const d2 = (mouseX - px) ** 2 + (mouseY - py) ** 2;
     if (d2 < minD2) {
       minD2 = d2;
       closest = { x: p[0], y: p[1], px, py };
