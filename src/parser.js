@@ -20,7 +20,7 @@ function parseCSV(text) {
         if (text[i + 1] === '"') { field += '"'; i++; } // escaped quote
         else inQuotes = false;
       } else field += c;
-    } else if (c === '"') inQuotes = true;
+    } else if (field.trim() === '' && c === '"') inQuotes = true;
     else if (c === ',') { row.push(field); field = ''; }
     else if (c === '\n' || c === '\r') {
       if (c === '\r' && text[i + 1] === '\n') i++;

@@ -33,6 +33,9 @@ function clearChart(msg = '') {
     ctx.textBaseline = 'middle';
     ctx.fillText(msg, W / 2, H / 2);
   }
+  // Clear both the cache and headers
+  cachedPlot = { pts: [], sx: null, sy: null, xi: 0, yi: 0, x0: 0, x1: 0, y0: 0, y1: 0 };
+  graphHeaders = [];
 }
 
 /**
@@ -53,7 +56,7 @@ function draw(rows, headers,xs = +$('xs').value, ys = +$('ys').value, type = $('
   let pts = [];
   for (const r of rows) {
     const x = Number(r[xi]), y = Number(r[yi]);
-    if (r[xi] !== '' && r[yi] !== '' && isFinite(x) && isFinite(y)) pts.push([x, y]);
+    if (r[xi]?.trim() !== '' && r[yi]?.trim() !== '' && isFinite(x) && isFinite(y)) pts.push([x, y]);
   }
   if (!pts.length) {
     clearChart('No valid numeric points found in selected columns.');

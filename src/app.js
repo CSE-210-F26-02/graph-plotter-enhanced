@@ -1,7 +1,8 @@
 import { clearChart, draw, getNumberOfPointsPlotted } from './chart.js';
+import { InvalidFileError, NoDataFoundError, NotEnoughColumnsError } from './errors.js';
 
 const $ = id => document.getElementById(id);
-const cv = $('cv'), ctx = cv.getContext('2d');
+const cv = $('cv')
 const chartWrap = $('chart-wrap');
 
 
@@ -17,33 +18,53 @@ let headers = [], rows = [], fileName = '';
  */
 
 function load(text, name) {
-  $('err').textContent = '';
-  const all = parseCSV(text);
-  if (all.length < 2) {
-    clearChart('No data rows found.');
-    return ($('err').textContent = 'No data rows found.');
-  }
-  headers = all[0].map((h, i) => h.trim() || 'col' + (i + 1));
-  rows = all.slice(1);
-  fileName = name;
+  try {
+    $('err').textContent = '';
+    const all = parseCSV(text);
+    if (all.length < 2) {
+      throw new NoDataFoundError('No data rows found.');
+    }
+    headers = all[0].map((h, i) => h.trim() || 'col' + (i + 1));
+    rows = all.slice(1);
+    fileName = name;
 
-  // keep only columns where most values are numbers
-  const numeric = headers.map((_, j) => j).filter(j => {
-    const sample = rows.slice(0, 500).filter(r => r[j] && r[j].trim() !== '');
-    return sample.length > 0 && sample.filter(r => !isNaN(Number(r[j]))).length / sample.length >= 0.8;
-  });
-  if (numeric.length < 2) {
-    clearChart('Need at least two numeric columns.');
-    return ($('err').textContent = 'Need at least two numeric columns.');
-  }
+    // keep only columns where most values are numbers
+    const numeric = headers.map((_, j) => j).filter(j => {
+      const sample = rows.slice(0, 500).filter(r => r[j] && r[j].trim() !== '');
+      return sample.length > 0 && sample.filter(r => !isNaN(Number(r[j]))).length / sample.length >= 0.8;
+    });
+    if (numeric.length < 2) {
+      throw new NotEnoughColumnsError('Need at least two numeric columns.');
+    }
 
-  const options = numeric.map(j => `<option value="${j}">${headers[j]}</option>`).join('');
-  $('xs').innerHTML = options;
-  $('ys').innerHTML = options;
-  $('xs').value = numeric[0];
-  $('ys').value = numeric[1];
-  drawGraph();
+    const options = numeric.map(j => `<option value="${j}">${headers[j]}</option>`).join('');
+    $('xs').innerHTML = options;
+    $('ys').innerHTML = options;
+    $('xs').value = numeric[0];
+    $('ys').value = numeric[1];
+    drawGraph();
+  }
+  catch (err) {
+    if (err instanceof InvalidFileError || err instanceof NoDataFoundError || err instanceof NotEnoughColumnsError) {
+      clearChart(err.message);
+      $('err').textContent = err.message;
+    } else {
+      clearChart('Unknown error occurred.');
+      $('err').textContent = "Unknown error occurred.";
+    }
+
+    // Reset headers, rows, and file name
+    headers = [];
+    rows = [];
+    fileName = '';
+
+    $('xs').innerHTML = [];
+    $('ys').innerHTML = [];
+    $('xs').value = '';
+    $('ys').value = '';
+  }
 }
+
 
 // ---------- drag and drop file upload ----------
 
