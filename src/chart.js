@@ -11,9 +11,11 @@ const $ = id => document.getElementById(id);
 const cv = $('cv'), ctx = cv.getContext('2d');
 const tooltip = $('tooltip')
 const COLOR = '#2563eb', GRID = '#e8ebf0', TEXT = '#1c2330', MUTED = '#6b7585';
-let graphHeaders = [];
 
+let graphHeaders = [];
 let cachedPlot = { pts: [], sx: null, sy: null, xi: 0, yi: 0, x0: 0, x1: 0, y0: 0, y1: 0 };
+// Zoom/Pan parameters expressed as percentages. For zoom (scale), 1.0 = no zoom and 0.0 = max zoom.
+let zoomParameters = {xScale: 0.7, yScale: 0.7, xTranslate: 1, yTranslate: 1}
 
 /**
  * Clears the Canvas where the chart is drawn when state resets or an error occurs.
@@ -45,10 +47,13 @@ function clearChart(msg = '') {
  * @param {function|null} [completionHandler=null] - Optional callback to be executed after the chart is drawn.
  * @returns {void}
  */
+// TODO: Split this function, way too big
 function draw(rows, headers,xs = +$('xs').value, ys = +$('ys').value, type = $('type').value, completionHandler = null) {
   graphHeaders = headers;
   if (!rows.length) return;
   const xi = xs, yi = ys;
+
+  // -- Update Cache data --
 
   // Read points from 'rows' into 'pts'
   let pts = [];
@@ -71,22 +76,35 @@ function draw(rows, headers,xs = +$('xs').value, ys = +$('ys').value, type = $('
   ctx.clearRect(0, 0, W, H);
 
   // Find bounding box of charted points (min, max)
-  let x_min = Infinity, x_max = -Infinity, y_min = Infinity, y_max = -Infinity;
+  let ptsXMin = Infinity, ptsXMax = -Infinity, ptsYMin = Infinity, ptsYMax = -Infinity;
   for (let i = 0; i < pts.length; i++) {
     const px = pts[i][0], py = pts[i][1];
-    if (px < x_min) x_min = px;
-    if (px > x_max) x_max = px;
-    if (py < y_min) y_min = py;
-    if (py > y_max) y_max = py;
+    if (px < ptsXMin) ptsXMin = px;
+    if (px > ptsXMax) ptsXMax = px;
+    if (py < ptsYMin) ptsYMin = py;
+    if (py > ptsYMax) ptsYMax = py;
   }
-  if (x_min === x_max) { x_min -= 1; x_max += 1; }
-  if (y_min === y_max) { y_min -= 1; y_max += 1; }
-  const padX = (x_max - x_min) * 0.04, padY = (y_max - y_min) * 0.06;
-  x_min -= padX; x_max += padX; y_min -= padY; y_max += padY;
+  if (ptsXMin === ptsXMax) { ptsXMin -= 1; ptsXMax += 1; }
+  if (ptsYMin === ptsYMax) { ptsYMin -= 1; ptsYMax += 1; }
+
+  // Apply zoom scaling and translation
+  const scaledXRange = (ptsXMax - ptsXMin) * zoomParameters.xScale;
+  const scaledYRange = (ptsYMax - ptsYMin) * zoomParameters.yScale; 
+  // Zoomed-frame is positioned relative to its minimum corner (ptsXMin, ptsYMin).
+  // Limits are the maximum/minimum 'reasonable' limits to translation (keeping the whole zoomed frame within the bounding box made by all of the points)
+  const maxXTranslation = (ptsXMax - scaledXRange), maxYTranslation = (ptsYMax - scaledYRange);
+  let xMin = (maxXTranslation - ptsXMin) * zoomParameters.xTranslate;
+  let yMin = (maxYTranslation - ptsYMin) * zoomParameters.yTranslate;
+  // Max coordinates of the zoomed frame are just min + range
+  let xMax = xMin + scaledXRange;
+  let yMax = yMin + scaledYRange;
+  // Pad
+  const padX = scaledXRange * 0.04, padY = scaledYRange * 0.06;
+  xMin -= padX; xMax += padX; yMin -= padY; yMax += padY;
 
   // Calculate dynamic left margin based on Y-axis tick string width to prevent clipping
   ctx.font = '12px system-ui, sans-serif';
-  const yTicks = niceTicks(y_min, y_max);
+  const yTicks = niceTicks(yMin, yMax);
   let maxYTextWidth = 30;
   for (const t of yTicks) {
     const w = ctx.measureText(fmt(t)).width;
@@ -105,16 +123,18 @@ function draw(rows, headers,xs = +$('xs').value, ys = +$('ys').value, type = $('
 
   // Converts coordinates relative to plot space (in margins) to actual screen positions
   // Cache vars have all this information, could move them out to their own functions
-  const toScreenX = x => leftMargin + (x - x_min) / (x_max - x_min) * plotWidth;       // data -> pixel
-  const toScreenY = y => topMargin + plotHeight - (y - y_min) / (y_max - y_min) * plotHeight;
+  const toScreenX = x => leftMargin + (x - xMin) / scaledXRange * plotWidth;       // data -> pixel
+  const toScreenY = y => topMargin + plotHeight - (y - yMin) / scaledYRange * plotHeight;
 
   // Cache plot geometry for hover tooltip lookups
   cachedPlot = { pts, sx: toScreenX, sy: toScreenY, xi, yi, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H };
 
+  // -- Draw --
+
   // grid + tick labels
   ctx.strokeStyle = GRID; ctx.fillStyle = MUTED;
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  for (const tickX of niceTicks(x_min, x_max)) {
+  for (const tickX of niceTicks(xMin, xMax)) {
     ctx.beginPath(); 
     ctx.moveTo(toScreenX(tickX), topMargin);
     ctx.lineTo(toScreenX(tickX), topMargin + plotHeight);
@@ -147,7 +167,12 @@ function draw(rows, headers,xs = +$('xs').value, ys = +$('ys').value, type = $('
   } else {
     ctx.globalAlpha = pts.length > 1000 ? 0.45 : 0.75;
     const r = pts.length > 5000 ? 2 : 4;
-    for (const [x, y] of pts) { ctx.beginPath(); ctx.arc(toScreenX(x), toScreenY(y), r, 0, Math.PI * 2); ctx.fill(); }
+    for (const [x, y] of pts) {
+      // TODO: Move check somewhere else, knowing which points are in bounds is helpful elsewhere as well
+      if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
+        ctx.beginPath(); ctx.arc(toScreenX(x), toScreenY(y), r, 0, Math.PI * 2); ctx.fill();
+      }
+    }
     ctx.globalAlpha = 1;
   }
   if (completionHandler) completionHandler();
