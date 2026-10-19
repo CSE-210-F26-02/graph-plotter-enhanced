@@ -11,23 +11,41 @@
 function parseCSV(text) {
   if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // remove BOM
   const out = [];
-  let row = [], field = '', inQuotes = false;
+  let row = [], field = '', inQuotes = false, start = 0;
+  const regex = /"(?:[^"\\]|\\.)*"|\n/g;
 
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; } // escaped quote
-        else inQuotes = false;
-      } else field += c;
-    } else if (c === '"') inQuotes = true;
-    else if (c === ',') { row.push(field); field = ''; }
-    else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(field); field = '';
-      if (row.length > 1 || row[0] !== '') out.push(row);
+  let m;
+  let finalLine = false;
+  while ((m = regex.exec(text)) !== null || !finalLine) {
+    if (m === null || m[0] === "\n") {
+      if (m === null) m = { index: text.length }; // handle final line without newline
+      if( m.index === text.length) finalLine = true;
+      const line = text.slice(start, m.index);
+      start = m.index + 1;
+      if (line.trim() === '') continue; // skip empty lines
+      field = '';
+      inQuotes = false;
+      // Empty string skip
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (inQuotes) {
+          if (c === '"') {
+            if (line[i + 1] === '"') { field += '"'; i++; } // escaped quote
+            else inQuotes = false;
+          } else field += c;
+        } else if (field.trim() === '' && c === '"') inQuotes = true;
+        else if (c === ',') { row.push(field); field = ''; }
+        else field += c;
+      }
+      if (inQuotes) {
+        field += '"';
+      }
+      row.push(field);
+      field = '';
+      out.push(row);
       row = [];
-    } else field += c;
+    }
+    if (finalLine) break;
   }
   if (field !== '' || row.length) { row.push(field); out.push(row); }
   return out;

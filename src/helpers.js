@@ -15,7 +15,7 @@ function niceTicks(min, max, count = 6) {
   const m = raw / p;
   const step = (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p;
   const ticks = [];
-  for (let v = Math.ceil(min / step) * step; v <= max; v += step) ticks.push(+v.toFixed(10));
+  for (let v = Math.ceil(min / step) * step; v <= max || v + step === v; v += step) ticks.push(+v.toFixed(10));
   return ticks;
 }
 
@@ -26,4 +26,20 @@ function niceTicks(min, max, count = 6) {
  */
 const fmt = v => String(+v.toPrecision(5));
 
-export { niceTicks, fmt };
+/**
+ * Sanitize any string and remove potentially harmful characters or attacks
+ * @param {string} str
+ * @returns {string}
+ */
+function sanitizeInput(str) {
+  
+    const entities = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+  };
+
+  return String(str).replace(/[&<>]/g, match => entities[match]);
+}
+
+export { niceTicks, fmt, sanitizeInput };

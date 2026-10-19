@@ -3,7 +3,7 @@ import { niceTicks, fmt } from './helpers.js';
 /**
  * @C-Herbert
  * @jp8577
- * @david1u 
+ * @david1u
  * Refactored the chart drawing logic out into this file
  */
 
@@ -32,7 +32,6 @@ import { niceTicks, fmt } from './helpers.js';
  */
 
 const $ = id => document.getElementById(id);
-
 const COLOR = '#2563eb', GRID = '#e8ebf0', TEXT = '#1c2330', MUTED = '#6b7585';
 
 const MIN_ZOOM_SCALE = 0.00002, MAX_ZOOM_SCALE = 10;
@@ -86,10 +85,11 @@ class ChartElement extends HTMLElement {
 
   /**
    * Clears the Canvas where the chart is drawn when state resets or an error occurs.
-   * @param {string} [msg=''] - The message to display on the canvas. Defaults to an empty string.
+   * @param {string} [msg=''] - The message to display on the canvas.
+   * Defaults to an empty string.
    * @returns {void}
    */
-  clearChart(msg = '') {
+  clearChart(msg = '', color = MUTED) {
     const cv = this.#canvas;
     const ctx = this.#context;
     const dpr = window.devicePixelRatio || 1;
@@ -101,26 +101,40 @@ class ChartElement extends HTMLElement {
     ctx.clearRect(0, 0, W, H);
     cv.style.cursor = 'default';
     if (msg) {
-      ctx.fillStyle = MUTED;
+      ctx.fillStyle = color;
       ctx.font = '14px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(msg, W / 2, H / 2);
     }
+    // Clear both the cache and headers
+    this.cachedPlot = null;
+    this.graphHeaders = [];
   }
 
   /**
    * Draws the chart on the canvas based on the current data and selected options.
    * @param {string[][]} rows - The data rows to be plotted.
    * @param {string[]} headers - The headers corresponding to the data columns.
-   * @param {number} xs - The index of the X-axis column. By default, it uses the value from the 'xs' select element.
-   * @param {number} ys - The index of the Y-axis column. By default, it uses the value from the 'ys' select element.
-   * @param {string} type - The type of chart ('line' or 'scatter'). By default, it uses the value from the 'type' select element.
-   * @param {function|null} [completionHandler=null] - Optional callback to be executed after the chart is drawn.
+   * @param {number} xs - The index of the X-axis column.
+   * By default, it uses the value from the 'xs' select element.
+   * @param {number} ys - The index of the Y-axis column.
+   * By default, it uses the value from the 'ys' select element.
+   * @param {string} type - The type of chart ('line' or 'scatter').
+   * By default, it uses the value from the 'type' select element.
+   * @param {function|null} [completionHandler=null] -
+   * Optional callback to be executed after the chart is drawn.
    * @returns {void}
    */
   // TODO: Split this function, way too big
-  draw(rows, headers, xs = +$('xs').value, ys = +$('ys').value, type =$('type').value, completionHandler = null) {
+  draw(
+    rows, 
+    headers, 
+    xs = +$('xs').value, 
+    ys = +$('ys').value, 
+    type =$('type').value, 
+    completionHandler = null
+  ) {
     const cv = this.#canvas;
     const ctx = this.#context;
     this.graphRows = rows;
@@ -128,14 +142,23 @@ class ChartElement extends HTMLElement {
     if (!rows.length) return;
     const xi = xs, yi = ys;
 
+    // Added: Use custom axis names when provided; otherwise use column names.
+    const xLabel = $('xlabel').value.trim() || headers[xi];
+    const yLabel = $('ylabel').value.trim() || headers[yi];
+
+    // Added: Read the shared axis-label size and the separate title size.
+    const axisFontSize = this.readFontSize('axis-font-size', 18);
+    const titleFontSize = this.readFontSize('title-font-size', 24);
+
     // -- Update Cache data --
 
     // Read points from 'rows' into 'pts'
     let pts = [];
     for (const r of rows) {
       const x = Number(r[xi]), y = Number(r[yi]);
-      if (r[xi] !== '' && r[yi] !== '' && isFinite(x) && isFinite(y)) pts.push([x, y]);
+      if (r[xi]?.trim() !== '' && r[yi]?.trim() !== '' && isFinite(x) && isFinite(y)) pts.push([x, y]);
     }
+
     if (!pts.length) {
       clearChart('No valid numeric points found in selected columns.');
       return ($('err').textContent = 'No valid numbers in those columns.');
@@ -146,10 +169,12 @@ class ChartElement extends HTMLElement {
     // TODO: do we need the if statement?
     if (type === 'line') pts.sort((a, b) => a[0] - b[0]);
 
-    const W = cv.clientWidth, H = cv.clientHeight;
+    
     // size canvas for sharp rendering on retina screens
     const dpr = window.devicePixelRatio || 1;
-    cv.width = W * dpr; cv.height = H * dpr;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; 
+    cv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
 
@@ -190,10 +215,11 @@ class ChartElement extends HTMLElement {
     }
 
     // Margin is any blank space outside of axis labels and grid lines
-    const leftMargin = Math.max(50, Math.ceil(maxYTextWidth + 24));
+    // Changed: Reserve additional space for larger axis labels and titles.
+    const leftMargin = Math.max(50, Math.ceil(maxYTextWidth + axisFontSize + 24));
     const rightMargin = 24;
-    const topMargin = $('title').value ? 40 : 20;
-    const bottomMargin = 50;
+    const topMargin = $('title').value ? Math.max(40, titleFontSize + 25) : 20;
+    const bottomMargin = Math.max(50, axisFontSize + 34);
 
     // Dimensions of the plot space in pixels
     const plotWidth = W - leftMargin - rightMargin;
@@ -209,9 +235,14 @@ class ChartElement extends HTMLElement {
     // -- Draw --
 
     // grid + tick labels
-    ctx.strokeStyle = GRID; ctx.fillStyle = MUTED;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    for (const tickX of niceTicks(xMin, xMax)) {
+    // changed: Use dashed lines for gridlines to improve visual clarity.
+    ctx.setLineDash([8,4]);
+    ctx.strokeStyle = GRID;
+    ctx.fillStyle = MUTED;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    for (const tickX of niceTicks(xMin, xMax, 12)) {
       const sx = toElementX(tickX);
       if (sx < leftMargin || sx > leftMargin + plotWidth) continue;
       ctx.beginPath(); 
@@ -220,7 +251,10 @@ class ChartElement extends HTMLElement {
       ctx.stroke();
       ctx.fillText(fmt(tickX), sx, topMargin + plotHeight + 6);
     }
-    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+
+    ctx.textAlign = 'right'; 
+    ctx.textBaseline = 'middle';
+
     for (const tickY of yTicks) {
       const sy = toElementY(tickY);
       if (sy < topMargin || sy > topMargin + plotHeight) continue;
@@ -231,13 +265,29 @@ class ChartElement extends HTMLElement {
       ctx.fillText(fmt(tickY), leftMargin - 8, sy);
     }
 
-    // Not sure I like axis labels drawn on the canvas, TODO?
-    // axis labels and title
-    ctx.fillStyle = TEXT; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(headers[xi], leftMargin + plotWidth / 2, H - 10);
-    ctx.save(); ctx.translate(14, topMargin + plotHeight / 2); ctx.rotate(-Math.PI / 2);
-    ctx.fillText(headers[yi], 0, 0); ctx.restore();
-    if ($('title').value) { ctx.font = 'bold 15px system-ui, sans-serif'; ctx.fillText($('title').value, leftMargin + plotWidth / 2, 24); }
+    // Changed: Draw custom axis labels with the selected font size.
+    ctx.fillStyle = TEXT;
+    ctx.font = `${axisFontSize}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(xLabel, leftMargin + plotWidth / 2, H - 10);
+
+    ctx.save();
+    ctx.translate(axisFontSize / 2 + 8, topMargin + plotHeight / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(yLabel, 0, 0);
+    ctx.restore();
+
+    // Changed: Draw the title with its selected font size and matching spacing.
+    if ($('title').value) {
+      ctx.font = `bold ${titleFontSize}px system-ui, sans-serif`;
+      ctx.textBaseline = 'top';
+      // Add some top padding for the title to avoid overlapping with the chart area.
+      const titlePadding = 10;
+
+      ctx.fillText($('title').value, leftMargin + plotWidth / 2, titlePadding);
+    }
 
     // data (clipped to the plot area so panned/zoomed data doesn't draw over margins)
     ctx.save();
@@ -245,10 +295,14 @@ class ChartElement extends HTMLElement {
     ctx.rect(leftMargin, topMargin, plotWidth, plotHeight);
     ctx.clip();
 
-    ctx.fillStyle = COLOR; ctx.strokeStyle = COLOR;
+    ctx.fillStyle = COLOR; 
+    ctx.strokeStyle = COLOR;
     if (type === 'line') {
-      ctx.lineWidth = 2; ctx.beginPath();
-      pts.forEach(([x, y], i) => (i ? ctx.lineTo(toElementX(x), toElementY(y)) : ctx.moveTo(toElementX(x), toElementY(y))));
+      ctx.lineWidth = 2; 
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => (
+        i ? ctx.lineTo(toElementX(x), toElementY(y)) : ctx.moveTo(toElementX(x), toElementY(y))
+      ));
       ctx.stroke();
     } else {
       ctx.globalAlpha = pts.length > 1000 ? 0.45 : 0.75;
@@ -256,7 +310,9 @@ class ChartElement extends HTMLElement {
       for (const [x, y] of pts) {
         // TODO: Move check somewhere else, knowing which points are in bounds is helpful elsewhere as well
         if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
-          ctx.beginPath(); ctx.arc(toElementX(x), toElementY(y), r, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); 
+          ctx.arc(toElementX(x), toElementY(y), r, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
       ctx.globalAlpha = 1;
@@ -264,6 +320,19 @@ class ChartElement extends HTMLElement {
     ctx.restore();
 
     if (completionHandler) completionHandler();
+  }
+
+  // Added: Read editable font sizes safely while the user is typing.
+  readFontSize(id, defaultSize) {
+    const input = $(id);
+
+    if (!input || input.value === '') return defaultSize;
+
+    const value = Number(input.value);
+
+    return Number.isFinite(value)
+      ? Math.min(64, Math.max(8, Math.round(value)))
+      : defaultSize;
   }
 
   getNumberOfPointsPlotted() {
@@ -370,9 +439,10 @@ class ChartElement extends HTMLElement {
 
     if (closest) {
       this.#tooltip.style.display = 'block';
-      this.#tooltip.style.left = `${closest.px + rect.left}px`;
-      this.#tooltip.style.top = `${closest.py + rect.top}px`;
-      this.#tooltip.textContent = `${this.graphHeaders[this.cachedPlot.xi]}: ${fmt(closest.x)}, ${this.graphHeaders[this.cachedPlot.yi]}: ${fmt(closest.y)}`;
+      this.#tooltip.style.left = `${closest.px}px`;
+      this.#tooltip.style.top = `${closest.py}px`;
+      this.#tooltip.textContent = 
+        `${this.graphHeaders[this.cachedPlot.xi]}: ${fmt(closest.x)}, ${this.graphHeaders[this.cachedPlot.yi]}: ${fmt(closest.y)}`;
     } else {
       this.#tooltip.style.display = 'none';
     }
@@ -382,7 +452,7 @@ class ChartElement extends HTMLElement {
    * Handles scroll-wheel zooming centered on the cursor position.
    */
   onScrollWheel(e) {
-    if (!this.cachedPlot.pts || !this.cachedPlot.pts.length || !this.cachedPlot.pw || !this.cachedPlot.ph) return;
+    if (!this.cachedPlot || !this.cachedPlot.pts.length || !this.cachedPlot.pw || !this.cachedPlot.ph) return;
     e.preventDefault();
     this.#tooltip.style.display = 'none';
 
@@ -418,6 +488,22 @@ class ChartElement extends HTMLElement {
     this.zoomParameters.yScale = newYScale;
 
     this.draw(this.graphRows, this.graphHeaders, this.cachedPlot.xi, this.cachedPlot.yi, this.cachedPlot.type);
+  }
+
+  /**
+   * Getter for chart's canvas. Only used for downloading.
+   */
+  get chartCanvas() {
+    return this.#canvas;
+  }
+
+  // Not sure if this should be exposed, but it was used in app.js
+
+  /**
+   * Getter for chart's draw context.
+   */
+  get chartContext() {
+    return this.#context;
   }
 }
 
