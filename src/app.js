@@ -3,8 +3,31 @@ import { InvalidFileError, NoDataFoundError, NotEnoughColumnsError } from './err
 import { sanitizeInput } from './helpers.js';
 
 const $ = id => document.getElementById(id);
-const cv = $('cv')
+const cv = $('cv'), ctx = cv.getContext('2d');
 const chartWrap = $('chart-wrap');
+
+const showWhichSaveButton = () => {
+    if ($('title').value.trim() === '') {
+    document.querySelector('.control-wrapper').style.display = 'flex';
+    document.querySelector('#dl:not(.control-wrapper #dl)').style.display = 'none';
+  }
+  else {
+    document.querySelector('.control-wrapper').style.display = 'none';
+    document.querySelector('#dl:not(.control-wrapper #dl)').style.display = 'inline-block';
+  }
+};
+
+const adjustSaveButtonSize = () => {
+  if (!$('title').value) return;
+  const metrics = ctx.measureText($('title').value);
+  const trueHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+
+  // Set the save button position based on the title height
+  const saveButton = document.querySelector('#dl:not(.control-wrapper #dl)');
+  if (saveButton) {
+    saveButton.style.minHeight = `${trueHeight}px`;
+  }
+};
 
 const drawGraph = () => draw(
   rows,
@@ -39,15 +62,14 @@ function validateCSVFile(file) {
  * @param {string} name - The name of the CSV file.
  */
 function load(text, name) {
+  try {
   $('err').textContent = '';
   const all = parseCSV(text);
 
   if (all.length < 2) {
-    clearChart('No data rows found.');
-    return ($('err').textContent = 'No data rows found.');
+    throw new NoDataFoundError('No data rows found.');
   }
-
-  headers = all[0].map((h, i) => h.trim() || 'col' + (i + 1));
+  headers = all[0].map((h, i) => sanitizeInput(h).trim() || 'col' + (i + 1));
   rows = all.slice(1);
   fileName = name;
 
@@ -58,65 +80,45 @@ function load(text, name) {
       sample.filter(r => !isNaN(Number(r[j]))).length / sample.length >= 0.8;
   });
 
-  if (numeric.length < 2) {
-    clearChart('Need at least two numeric columns.');
-    return ($('err').textContent = 'Need at least two numeric columns.');
+    if (numeric.length < 2) {
+      throw new NotEnoughColumnsError('Need at least two numeric columns.');
+    }
+
+    const options = numeric.map(j => new Option(headers[j], j));
+    $('xs').innerHTML = '';
+    $('ys').innerHTML = '';
+    options.forEach(option => {
+      $('xs').add(option.cloneNode(true));
+      $('ys').add(option.cloneNode(true));
+    });
+    $('xs').value = numeric[0];
+    $('ys').value = numeric[1];
+    drawGraph();
+    adjustSaveButtonSize();
+  } catch (err) {
+    if (err instanceof InvalidFileError || err instanceof NoDataFoundError || err instanceof NotEnoughColumnsError) {
+      clearChart(err.message);
+      $('err').textContent = err.message;
+    } else {
+      clearChart('Unknown error occurred.');
+      $('err').textContent = "Unknown error occurred.";
+    }
+
+    // Reset headers, rows, and file name
+    headers = [];
+    rows = [];
+    fileName = '';
+
+    $('xs').innerHTML = [];
+    $('ys').innerHTML = [];
+    $('xs').value = '';
+    $('ys').value = '';
   }
-
-  const options = numeric
-    .map(j => `<option value="${j}">${headers[j]}</option>`)
-    .join('');
-
-  $('xs').innerHTML = options;
-  $('ys').innerHTML = options;
-  $('xs').value = numeric[0];
-  $('ys').value = numeric[1];
-  drawGraph();
 }
 
 
 // ---------- drag and drop file upload ----------
 
-/**
- * @jessiezhang199 Idea: We can maybe add like a visual cue to change the screen
- * so when a file enters the drop area they know its a drag and drop.
- * I didn't even know this feature existed until I read the code and even then
- * though there's a blue box but it isn't really obvious
- */
-
-/**
- * Enable dragging CSV files directly onto the chart area
- * Users can drag CSV files directly onto the chart area to load them.
- */
-['dragenter', 'dragover'].forEach(evt => {
-  chartWrap.addEventListener(evt, e => {
-    e.preventDefault();
-    chartWrap.classList.add('drag-over');
-  });
-});
-
-/**
- * Removes the drag-over class when the drag leaves the chart area
- * or a file is dropped.
- */
-['dragleave', 'drop'].forEach(evt => {
-  chartWrap.addEventListener(evt, e => {
-    e.preventDefault();
-    chartWrap.classList.remove('drag-over');
-  });
-});
-
-chartWrap.addEventListener('drop', e => {
-  const f = e.dataTransfer && e.dataTransfer.files[0];
-  if (!f) return;
-
-  // Added: Check files dropped onto the chart.
-  if (!validateCSVFile(f)) return;
-
-  const reader = new FileReader();
-  reader.onload = () => load(reader.result, f.name);
-  reader.readAsText(f);
-});
 
 // ---------- events ----------
 $('file').onchange = e => {
@@ -151,9 +153,18 @@ $('sample').onclick = () => {
 
 /* Resize handler */
 
-['xs', 'ys', 'type'].forEach(id => ($(id).onchange = drawGraph));
-$('title').oninput = drawGraph;
-window.addEventListener('resize', drawGraph);
+['xs', 'ys', 'type'].forEach(id => ($(id).onchange = () => {
+  drawGraph();
+  adjustSaveButtonSize();
+}));
+$('title').oninput = () => {
+  showWhichSaveButton();
+  drawGraph();
+};
+window.addEventListener('resize', () => {
+  drawGraph();
+  adjustSaveButtonSize();
+});
 
 // Added: Keep each editable font-size field synchronized with its preset menu.
 const fontControls = [
@@ -230,6 +241,7 @@ $('generate').onclick = () => {
   }
 
   drawGraph();
+  adjustSaveButtonSize();
 };
 
 /* Download chart as image */
@@ -252,4 +264,5 @@ $('dl').onclick = () => {
 };
 
 $('sample').click(); // start with sample data
+showWhichSaveButton();
 

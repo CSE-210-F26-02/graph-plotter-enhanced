@@ -215,7 +215,10 @@ function draw(
   if ($('title').value) {
     ctx.font = `bold ${titleFontSize}px system-ui, sans-serif`;
     ctx.textBaseline = 'top';
-    ctx.fillText($('title').value, L + pw / 2, 10);
+    // Add some top padding for the title to avoid overlapping with the chart area.
+    const titlePadding = 10;
+
+    ctx.fillText($('title').value, L + pw / 2, titlePadding);
   }
 
   // data
