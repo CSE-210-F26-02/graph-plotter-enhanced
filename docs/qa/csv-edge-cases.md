@@ -98,6 +98,21 @@ EC-33 and EC-34 are rejected, but the message doesn't say why. A message naming 
 
 Measured in Chrome with 100,000 rows: a scatter redraw takes **16.6 ms**, a full 60 fps frame. Of that, **4.5 ms** is reconverting text to numbers. A line-chart redraw takes 7.7 ms. Panning redraws on every mouse move, so this cost repeats continuously while dragging. That matches the "unusually high CPU on every redraw" issue, though the redraws don't freeze.
 
+### Automated redraw-time tests
+
+[`tests/redraw-performance.test.js`](../../tests/redraw-performance.test.js) runs with every build. Node has no GPU, so these tests time the JavaScript side of a redraw (parsing, sorting, scaling, ticks, looping over points), not pixel drawing. The limits are generous, so slower CI machines don't cause false failures, and each run prints its measured times in the log.
+
+| ID | Check | Limit | Measured (Node, M-series Mac) | Result |
+|---|---|---|---|---|
+| PERF-01 | Scatter / line redraw of 100k points | Under 200 ms | 10.3 ms / 7.4 ms | Pass |
+| PERF-02 | 10× more points → redraw time | At most 30× | ~10× for both (linear) | Pass |
+| PERF-03 | Hover search over 100k points, per mouse move | Under 50 ms | 0.5 ms (5.2 ms in Chrome, which also moves the tooltip on the page) | Pass |
+| PERF-04 | Redraws caused by 4 scroll events in one frame | At most 1 | 4 | **Bug** (performance) |
+
+PERF-04 is the biggest measured win. In Chrome with 100k points, a fast scroll of 4 events per frame takes **52 ms per frame (~19 fps)**. Redrawing at most once per frame (`requestAnimationFrame`) brings that to **10 ms (~96 fps)**, and zoom still counts every event.
+
+The tests were checked in a scratch copy. A deliberate quadratic slowdown failed PERF-01 (666 ms) and PERF-02 (114×). A once-per-frame redraw fix turned PERF-04 green with no other test broken.
+
 ## Bug-fix task checklist
 
 How the issues listed in the bug-fix task map to these tests:

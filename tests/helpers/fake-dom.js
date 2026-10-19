@@ -88,6 +88,9 @@ export const errorBox = byId('err');
 export const created = [];
 
 globalThis.window ??= { devicePixelRatio: 1, addEventListener() {} };
+// A "frame" every 16 ms, so code that redraws once per frame works in tests.
+globalThis.requestAnimationFrame ??= (callback) => setTimeout(() => callback(performance.now()), 16);
+globalThis.cancelAnimationFrame ??= (id) => clearTimeout(id);
 globalThis.HTMLElement ??= class HTMLElement {
   appendChild() {}
   addEventListener() {}
