@@ -245,9 +245,8 @@ $('generate').onclick = () => {
   adjustSaveButtonSize();
 };
 
-/* Download chart as image */
-$('dl').onclick = () => {
-  if (!rows.length) return;
+const downloadChart = () => {
+    if (!rows.length) return;
 
   const c = document.createElement('canvas');
   c.width = cv.width;
@@ -262,6 +261,14 @@ $('dl').onclick = () => {
   a.download = 'chart.png';
   a.href = c.toDataURL('image/png');
   a.click();
+};
+
+/* Download chart as image */
+$('dl-no-title').onclick = () => {
+  downloadChart();
+};
+$('dl').onclick = () => {
+  downloadChart();
 };
 
 $('sample').click(); // start with sample data
