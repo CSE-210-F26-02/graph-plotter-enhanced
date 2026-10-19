@@ -1,4 +1,4 @@
-import { niceTicks, fmt } from './helpers.js';
+import { niceTicks, tickFormatter, fmt } from './helpers.js';
 
 /**
  * @C-Herbert
@@ -35,6 +35,8 @@ const $ = id => document.getElementById(id);
 const COLOR = '#2563eb', GRID = '#e8ebf0', TEXT = '#1c2330', MUTED = '#6b7585';
 
 const MIN_ZOOM_SCALE = 0.00002, MAX_ZOOM_SCALE = 10;
+// Smallest visible range relative to the data's magnitude; below this, doubles can't tell ticks apart
+const MIN_RELATIVE_RANGE = 1e-12;
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
 class ChartElement extends HTMLElement {
@@ -113,6 +115,17 @@ class ChartElement extends HTMLElement {
   }
 
   /**
+   * Restores the default (fully zoomed-out, unpanned) view and cancels any
+   * in-progress interaction. Call before drawing newly loaded data.
+   * @returns {void}
+   */
+  resetView() {
+    this.zoomParameters = { xScale: 1.0, yScale: 1.0, xTranslate: 0.0, yTranslate: 0.0 };
+    this.isDragging = false;
+    this.#tooltip.style.display = 'none';
+  }
+
+  /**
    * Draws the chart on the canvas based on the current data and selected options.
    * @param {string[][]} rows - The data rows to be plotted.
    * @param {string[]} headers - The headers corresponding to the data columns.
@@ -160,7 +173,7 @@ class ChartElement extends HTMLElement {
     }
 
     if (!pts.length) {
-      clearChart('No valid numeric points found in selected columns.');
+      this.clearChart('No valid numeric points found in selected columns.');
       return ($('err').textContent = 'No valid numbers in those columns.');
     }
     $('err').textContent = '';
@@ -208,9 +221,10 @@ class ChartElement extends HTMLElement {
     // Calculate dynamic left margin based on Y-axis tick string width to prevent clipping
     ctx.font = '12px system-ui, sans-serif';
     const yTicks = niceTicks(yMin, yMax);
+    const fmtY = tickFormatter(yMin, yMax);
     let maxYTextWidth = 30;
     for (const t of yTicks) {
-      const w = ctx.measureText(fmt(t)).width;
+      const w = ctx.measureText(fmtY(t)).width;
       if (w > maxYTextWidth) maxYTextWidth = w;
     }
 
@@ -230,7 +244,10 @@ class ChartElement extends HTMLElement {
     const toElementY = y => topMargin + plotHeight - (y - yMin) / (yMax - yMin) * plotHeight;
 
     // Cache plot geometry for hover tooltip and pan/zoom lookups
-    this.cachedPlot = { pts, sx: toElementX, sy: toElementY, xi, yi, type, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H };
+    this.cachedPlot = { pts, sx: toElementX, sy: toElementY, xi, yi, type, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H,
+      xRange, yRange,
+      xAbs: Math.max(Math.abs(ptsXMin), Math.abs(ptsXMax)),
+      yAbs: Math.max(Math.abs(ptsYMin), Math.abs(ptsYMax)) };
 
     // -- Draw --
 
@@ -242,14 +259,24 @@ class ChartElement extends HTMLElement {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    for (const tickX of niceTicks(xMin, xMax, 12)) {
+    // Use fewer X ticks when labels get long (e.g. 1.0000005e9) so they never overlap
+    let xCount = 12, xTicks, fmtX;
+    for (; xCount >= 2; xCount--) {
+      xTicks = niceTicks(xMin, xMax, xCount);
+      fmtX = tickFormatter(xMin, xMax, xCount);
+      let widest = 0;
+      for (const t of xTicks) widest = Math.max(widest, ctx.measureText(fmtX(t)).width);
+      if ((widest + 16) * xTicks.length <= plotWidth) break;
+    }
+
+    for (const tickX of xTicks) {
       const sx = toElementX(tickX);
       if (sx < leftMargin || sx > leftMargin + plotWidth) continue;
       ctx.beginPath(); 
       ctx.moveTo(sx, topMargin);
       ctx.lineTo(sx, topMargin + plotHeight);
       ctx.stroke();
-      ctx.fillText(fmt(tickX), sx, topMargin + plotHeight + 6);
+      ctx.fillText(fmtX(tickX), sx, topMargin + plotHeight + 6);
     }
 
     ctx.textAlign = 'right'; 
@@ -262,7 +289,7 @@ class ChartElement extends HTMLElement {
       ctx.moveTo(leftMargin, sy);
       ctx.lineTo(leftMargin + plotWidth, sy);
       ctx.stroke();
-      ctx.fillText(fmt(tickY), leftMargin - 8, sy);
+      ctx.fillText(fmtY(tickY), leftMargin - 8, sy);
     }
 
     // Changed: Draw custom axis labels with the selected font size.
@@ -345,7 +372,7 @@ class ChartElement extends HTMLElement {
   stopDragging() {
     if (!this.isDragging) return;
     this.isDragging = false;
-    this.#canvas.style.cursor = this.cachedPlot.pts.length ? 'grab' : 'default';
+    this.#canvas.style.cursor = this.cachedPlot?.pts.length ? 'grab' : 'default';
   }
 
   /**
@@ -477,8 +504,16 @@ class ChartElement extends HTMLElement {
     const oldXScale = this.zoomParameters.xScale;
     const oldYScale = this.zoomParameters.yScale;
 
-    const newXScale = clamp(oldXScale * zoomFactor, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
-    const newYScale = clamp(oldYScale * zoomFactor, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
+    let newXScale = clamp(oldXScale * zoomFactor, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
+    let newYScale = clamp(oldYScale * zoomFactor, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
+
+    // Stop zooming in once the view would be narrower than floating point can resolve
+    // (e.g. IDs near 1e17), otherwise tick labels collapse. Never forces a zoom out.
+    if (zoomingIn) {
+      const { xRange, yRange, xAbs, yAbs } = this.cachedPlot;
+      newXScale = Math.max(newXScale, Math.min(oldXScale, xAbs * MIN_RELATIVE_RANGE / xRange));
+      newYScale = Math.max(newYScale, Math.min(oldYScale, yAbs * MIN_RELATIVE_RANGE / yRange));
+    }
 
     // Adjust translation (including padding) so the point under the cursor stays stationary
     this.zoomParameters.xTranslate += (1.08 * uX - 0.04) * (oldXScale - newXScale);

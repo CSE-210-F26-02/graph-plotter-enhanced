@@ -94,6 +94,8 @@ function load(text, name) {
     });
     $('xs').value = numeric[0];
     $('ys').value = numeric[1];
+    // New data: drop the previous zoom/pan so the whole dataset is visible
+    chart.resetView();
     drawGraph();
     adjustSaveButtonSize();
   } catch (err) {
@@ -155,6 +157,8 @@ $('sample').onclick = () => {
 /* Resize handler */
 
 ['xs', 'ys', 'type'].forEach(id => ($(id).onchange = () => {
+  // Different columns have a different range, so start from the full view
+  if (id !== 'type') chart.resetView();
   drawGraph();
   adjustSaveButtonSize();
 }));
