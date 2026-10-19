@@ -250,10 +250,7 @@ describe('Unsupported formats get a message', () => {
 });
 
 describe('Redraw cost', () => {
-  test('EC-37: redrawing (pan, zoom, resize) reuses the parsed numbers instead of re-reading text', {
-    todo: 'Performance: draw() converts every text cell to a number on every redraw, and panning redraws on '
-      + 'each mouse move. In Chrome, 4.5 ms of a 16.6 ms redraw of 100k rows is this conversion.',
-  }, () => {
+  test('EC-37: redrawing (pan, zoom, resize) reuses the parsed numbers instead of re-reading text', () => {
     let reads = 0;
     const cell = (text) => Object.assign(new String(text), { trim() { reads++; return String(text).trim(); } });
     const rows = Array.from({ length: 100 }, (_, i) => [cell(String(i)), cell(String(i * 2))]);

@@ -49,7 +49,11 @@ class ChartElement extends HTMLElement {
   graphHeaders = [];
   /** @type {ChartData} */
   cachedPlot;
-  
+  // Parsed points for the current rows, columns and chart type; reused by redraws
+  #pointCache = null;
+  // True while a redraw is waiting for the next animation frame
+  #redrawPending = false;
+
   /** @type {ZoomParameters} */
   zoomParameters = {xScale: 1.0, yScale: 1.0, xTranslate: 0.0, yTranslate: 0.0}
 
@@ -165,11 +169,21 @@ class ChartElement extends HTMLElement {
 
     // -- Update Cache data --
 
-    // Read points from 'rows' into 'pts'
-    let pts = [];
-    for (const r of rows) {
-      const x = Number(r[xi]), y = Number(r[yi]);
-      if (r[xi]?.trim() !== '' && r[yi]?.trim() !== '' && isFinite(x) && isFinite(y)) pts.push([x, y]);
+    // Read points from 'rows' into 'pts'. Parsing is the slowest part of a redraw, so pan,
+    // zoom and resize reuse the parsed points until the rows, columns or chart type change.
+    let pts;
+    const cache = this.#pointCache;
+    if (cache && cache.rows === rows && cache.xi === xi && cache.yi === yi && cache.type === type) {
+      pts = cache.pts;
+    } else {
+      pts = [];
+      for (const r of rows) {
+        const x = Number(r[xi]), y = Number(r[yi]);
+        if (r[xi]?.trim() !== '' && r[yi]?.trim() !== '' && isFinite(x) && isFinite(y)) pts.push([x, y]);
+      }
+      // Line charts connect points left to right
+      if (type === 'line') pts.sort((a, b) => a[0] - b[0]);
+      this.#pointCache = { rows, xi, yi, type, pts };
     }
 
     if (!pts.length) {
@@ -178,9 +192,6 @@ class ChartElement extends HTMLElement {
     }
     $('err').textContent = '';
     if (!this.isDragging && !this.zoomCursorTimeout) cv.style.cursor = 'grab';
-
-    // TODO: do we need the if statement?
-    if (type === 'line') pts.sort((a, b) => a[0] - b[0]);
 
     
     // size canvas for sharp rendering on retina screens
@@ -362,6 +373,21 @@ class ChartElement extends HTMLElement {
       : defaultSize;
   }
 
+  /**
+   * Redraws at most once per animation frame. Trackpads and fast wheels send several
+   * events per frame; each one still updates the zoom/pan, but only one redraw runs.
+   * @returns {void}
+   */
+  requestRedraw() {
+    if (this.#redrawPending) return;
+    this.#redrawPending = true;
+    requestAnimationFrame(() => {
+      this.#redrawPending = false;
+      if (!this.cachedPlot) return; // cleared while waiting
+      this.draw(this.graphRows, this.graphHeaders, this.cachedPlot.xi, this.cachedPlot.yi, this.cachedPlot.type);
+    });
+  }
+
   getNumberOfPointsPlotted() {
     return this.cachedPlot ? this.cachedPlot.pts.length : 0;
   }
@@ -442,7 +468,7 @@ class ChartElement extends HTMLElement {
         this.zoomParameters.yTranslate += (dy / this.cachedPlot.ph) * this.zoomParameters.yScale * 1.12;
       }
 
-      this.draw(this.graphRows, this.graphHeaders, this.cachedPlot.xi, this.cachedPlot.yi, this.cachedPlot.type);
+      this.requestRedraw();
       return;
     }
 
@@ -522,7 +548,7 @@ class ChartElement extends HTMLElement {
     this.zoomParameters.xScale = newXScale;
     this.zoomParameters.yScale = newYScale;
 
-    this.draw(this.graphRows, this.graphHeaders, this.cachedPlot.xi, this.cachedPlot.yi, this.cachedPlot.type);
+    this.requestRedraw();
   }
 
   /**

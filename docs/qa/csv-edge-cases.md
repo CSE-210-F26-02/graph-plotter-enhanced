@@ -2,7 +2,7 @@
 
 Part of #3. Tested against `main` @ `3792b0b` on 2026-10-19.
 
-**Result: 37 cases. 25 behave as expected, 12 are bugs.** Bugs are automated tests marked `todo`, so they report without failing the build. When a fix lands, its test passes; then remove its `todo` option so it stays fixed.
+**Result: 37 cases. 26 behave as expected, 11 are bugs.** EC-37 was fixed by the redraw performance fix (see Redraw cost). Bugs are automated tests marked `todo`, so they report without failing the build. When a fix lands, its test passes; then remove its `todo` option so it stays fixed.
 
 Each case is a CSV sent through the real upload path (file input → `app.js` → `parseCSV` → `chart.draw`) by [`tests/csv-edge-cases.test.js`](../../tests/csv-edge-cases.test.js). The test IDs match this page. Run them with `npm test`; they also run on GitHub Actions for every push and PR. Results marked † were also checked by hand in Chrome.
 
@@ -94,25 +94,77 @@ EC-33 and EC-34 are rejected, but the message doesn't say why. A message naming 
 
 | ID | Input | Expected | Actual | Result |
 |---|---|---|---|---|
-| EC-37 † | Redraw the same data (pan, zoom, resize) | Reuse the parsed numbers | Every text cell is converted to a number again on each redraw | **Bug** (performance) |
+| EC-37 † | Redraw the same data (pan, zoom, resize) | Reuse the parsed numbers | Before the fix: every text cell was converted to a number again on each redraw. Now: parsed points are cached until the rows, columns or chart type change | **Fixed** |
 
-Measured in Chrome with 100,000 rows: a scatter redraw takes **16.6 ms**, a full 60 fps frame. Of that, **4.5 ms** is reconverting text to numbers. A line-chart redraw takes 7.7 ms. Panning redraws on every mouse move, so this cost repeats continuously while dragging. That matches the "unusually high CPU on every redraw" issue, though the redraws don't freeze.
+Before the fix, in Chrome with 100,000 rows: a scatter redraw took **16.6 ms**, a full 60 fps frame, and **4.5 ms** of that was reconverting text to numbers. Panning and scroll-zoom also redrew on every input event, several times per frame. That matched the "unusually high CPU on every redraw" issue, though the redraws didn't freeze.
+
+### The fix
+
+In `src/chart.js`:
+
+1. **Parse once (F2):** `draw()` caches the parsed points (sorted, for line charts) keyed by the rows array, the X/Y columns and the chart type. Pan, zoom and resize reuse them; loading a file, changing a column or changing the chart type re-parses.
+2. **Redraw at most once per frame (F1):** panning and scroll-zoom call the new `requestRedraw()`, which schedules one `draw()` with `requestAnimationFrame`. Every event still updates the zoom/pan; only the redraw is shared.
 
 ### Automated redraw-time tests
 
 [`tests/redraw-performance.test.js`](../../tests/redraw-performance.test.js) runs with every build. Node has no GPU, so these tests time the JavaScript side of a redraw (parsing, sorting, scaling, ticks, looping over points), not pixel drawing. The limits are generous, so slower CI machines don't cause false failures, and each run prints its measured times in the log.
 
-| ID | Check | Limit | Measured (Node, M-series Mac) | Result |
-|---|---|---|---|---|
-| PERF-01 | Scatter / line redraw of 100k points | Under 200 ms | 10.3 ms / 7.4 ms | Pass |
-| PERF-02 | 10× more points → redraw time | At most 30× | ~10× for both (linear) | Pass |
-| PERF-03 | Hover search over 100k points, per mouse move | Under 50 ms | 0.5 ms (5.2 ms in Chrome, which also moves the tooltip on the page) | Pass |
-| PERF-04 | Redraws caused by 4 scroll events in one frame | At most 1 | 4 | **Bug** (performance) |
-| PERF-05 | Work for a burst of 4 scroll events (100k points), including any redraw scheduled for the next frame | Under 800 ms | 44 ms | Pass |
+| ID | Check | Limit | Before the fix (Node, M-series Mac) | After the fix | Result |
+|---|---|---|---|---|---|
+| PERF-01 | Scatter / line redraw of 100k points | Under 200 ms | 10.3 ms / 7.4 ms | 8.2 ms / 3.7 ms | Pass |
+| PERF-02 | 10× more points → redraw time | At most 30× | ~10× for both (linear) | ~10× | Pass |
+| PERF-03 | Hover search over 100k points, per mouse move | Under 50 ms | 0.5 ms | 0.5 ms | Pass |
+| PERF-04 | Redraws caused by 4 scroll events in one frame | At most 1 | 4 (bug) | **1** | **Pass** (was TODO) |
+| PERF-05 | Work for a burst of 4 scroll events (100k points), including any redraw scheduled for the next frame | Under 800 ms | 44 ms | **10.9 ms (−75%)** | Pass |
 
-PERF-04 is the biggest measured win. In Chrome with 100k points, a fast scroll of 4 events per frame takes **52 ms per frame (~19 fps)**. Redrawing at most once per frame (`requestAnimationFrame`) brings that to **10 ms (~96 fps)**, and zoom still counts every event.
+The timing tests were checked in a scratch copy. A deliberate quadratic slowdown failed PERF-01 (666 ms) and PERF-02 (114×). Hover is not a bottleneck: Chrome measured 0.1–0.5 ms per move. An earlier note in this doc said 5.2 ms, but that didn't reproduce in repeated runs.
 
-The tests were checked in a scratch copy. A deliberate quadratic slowdown failed PERF-01 (666 ms) and PERF-02 (114×). A once-per-frame redraw fix turned PERF-04 green with no other test broken.
+### How the fix was chosen: measured effect of each candidate
+
+Each candidate fix was applied alone to a scratch copy of `src/chart.js`, then timed with the tests above in Node and with real frame times in Chrome. All 100,000 points, scatter chart unless noted. Every variant passed the full test suite.
+
+- **F1, redraw at most once per frame:** pan and zoom call `requestAnimationFrame` instead of redrawing on every event; zoom still counts every event.
+- **F2, parse numbers once:** cache the parsed (and, for line charts, sorted) points until the data, column or chart type changes.
+- **F3, grid for hover search:** bucket points into 10 px cells, built on the first hover after each redraw.
+- **F4, squares instead of circles:** draw dots with `fillRect` when there are more than 1,000 points.
+
+| Fix | Node: scatter redraw | Node: line redraw | Node: scroll burst (PERF-05) | Chrome: fast-scroll frame | Chrome: pan frame | Chrome: JS per redraw |
+|---|---|---|---|---|---|---|
+| Before | 10.3 ms | 6.5 ms | 43.5 ms | 41.6 ms (~24 fps) | 26–33 ms | 13.3 ms |
+| F1 | no change | no change | **13.6 ms (−69%)** | **16.6 ms** | **16.7 ms** | no change |
+| F2 | 8.3 ms (−19%) | **3.5 ms (−46%)** | 34.3 ms (−21%) | 25 ms | 24.5 ms | 10 ms (−25%) |
+| F3 | no change | no change | no change | no change | no change | no change; first hover after each redraw costs 1.7 ms more |
+| F4 | 6.1 ms (−41%, see below) | no change | 27.5 ms | **no better (41.7 ms)** | no better | **17.7–19.5 ms (worse)** |
+| **F1 + F2** | 8.2 ms (−20%) | 3.7 ms (−43%) | **10.9 ms (−75%)** | **8.4–9.2 ms (~110 fps)** | **16.7 ms** | 10 ms (−25%) |
+
+The display ran at 60 Hz for some measurements and 120 Hz for others, so 16.7 ms frames are "full speed" at 60 Hz. Node results are medians of 3 runs (line redraw: 21 runs). Chrome results come from 2–3 rounds.
+
+**Chosen: F1 + F2** (implemented in `src/chart.js`). F1 fixes fast scrolling and panning on its own. F2 cuts every redraw's cost and halves line-chart redraws. Together, a fast scroll goes from ~24 fps to ~110 fps, and both make PERF-04 and EC-37 pass.
+
+**Not recommended:**
+- **F3:** hover search is not a bottleneck. Scanning all 100k points took 0.1–0.5 ms per mouse move, so the grid only adds a 1.7 ms build cost after each redraw.
+- **F4:** in real Chrome, `fillRect` per point was slower than `arc` (17.7–19.5 ms vs 13.3 ms of JS per redraw), and frame times did not improve. Its −41% in Node is an artifact of the fake canvas (3 calls per dot vs 1), which is why canvas changes must be checked in a real browser.
+
+### Final code, checked in Chrome
+
+After implementing F1 + F2 in `src/chart.js`, the real page was measured again with 100,000 points (3 rounds, 120 Hz display):
+
+| | Before | After |
+|---|---|---|
+| Fast scroll, 4 wheel events per frame | 41.6 ms per frame (~24 fps) | **8.4 ms** (full speed at 120 Hz) after the first round warmed up (16.5 ms) |
+| Panning, 2 mouse moves per frame | 26–33 ms (~30–38 fps) | **16.7 ms** (60 fps) |
+| JavaScript per redraw | 13.3 ms | 11 ms |
+
+The page was also checked by hand: changing the Y column re-reads the data; switching to a line chart sorts by X while scatter keeps file order; loading a new file replaces the cached points; zoom redraws on the next frame; and a 40 px drag pans exactly 40 px.
+
+**Remaining limit:** one redraw of 100k points still takes about 11 ms of JavaScript, which is more than a 120 Hz frame (8.3 ms) allows, so panning large files runs at 60 fps rather than 120. Going further would need cheaper drawing, such as downsampling to a few points per pixel. That is out of scope here.
+
+### How it was measured
+
+1. **Timing tests:** `npm test`, whose redraw tests print their times; medians of 3 runs, 21 for the line redraw.
+2. **Candidates in isolation:** each candidate fix was applied alone to its own scratch copy, plus one copy with all of them. Every copy passed the full test suite before it was timed.
+3. **Real frame times in Chrome:** each copy was loaded with a 100k-row CSV, and frame-to-frame times were recorded with `requestAnimationFrame` (median of 30 frames) while simulating fast scrolling (4 wheel events per frame) and panning (2 mouse moves per frame). Redraw CPU time was the average of 10 `draw()` calls.
+4. **Final check:** the chosen fixes were written into `src/chart.js`, retested with the full suite, and re-measured in Chrome (table above).
 
 ## Bug-fix task checklist
 
@@ -125,6 +177,6 @@ How the issues listed in the bug-fix task map to these tests:
 | Old data only partially kept after a failure | Confirmed | EC-31, EC-32 |
 | Unquoted files break the parser | Confirmed | EC-22, EC-23; also EC-24 |
 | Potential XSS risk | No execution found; guarded. Escaping garbles labels | EC-29, EC-30 (pass); EC-26–28 |
-| Numbers not kept in a friendly format, high CPU on redraw | Confirmed (4.5 of 16.6 ms per redraw) | EC-37 |
+| Numbers not kept in a friendly format, high CPU on redraw | **Fixed**: parse once, redraw once per frame | EC-37, PERF-04, PERF-05 |
 
 To check that the tests accept real fixes, four sample fixes were applied in a scratch copy (not committed): stop escaping labels, stop the parser after the final line, and clear the status and old data on a failed upload. The tests for EC-24, 26, 27, 28, 31 and 32 all turned green, with no other test broken.

@@ -102,10 +102,7 @@ describe('Scroll burst cost', () => {
 });
 
 describe('Redraw count', () => {
-  test('PERF-04: a burst of 4 scroll events in one frame causes at most 1 redraw', {
-    todo: 'Performance: every wheel event redraws immediately, so a fast trackpad scroll redraws 4 times per frame. '
-      + 'In Chrome with 100k points that is 52 ms per frame (~19 fps) instead of 10 ms with one redraw per frame.',
-  }, async () => {
+  test('PERF-04: a burst of 4 scroll events in one frame causes at most 1 redraw', async () => {
     chart.draw(makeRows(1000), ['x', 'y'], 0, 1, 'scatter');
     const { L, T, pw, ph } = chart.cachedPlot;
     const event = (deltaY) => ({ clientX: L + pw / 2, clientY: T + ph / 2, deltaY, preventDefault() {} });
