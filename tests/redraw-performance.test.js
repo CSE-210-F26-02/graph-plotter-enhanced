@@ -69,6 +69,38 @@ describe('Redraw time', () => {
   });
 });
 
+describe('Scroll burst cost', () => {
+  test('PERF-05: a burst of 4 scroll events on 100,000 points costs under 800 ms of work', async (t) => {
+    chart.draw(makeRows(100_000), ['x', 'y'], 0, 1, 'scatter');
+    const { L, T, pw, ph } = chart.cachedPlot;
+    const event = (deltaY) => ({ clientX: L + pw / 2, clientY: T + ph / 2, deltaY, preventDefault() {} });
+
+    // Time spent in the scroll handlers, plus any redraw they schedule for the next frame.
+    let drawMs = 0;
+    const realDraw = chart.draw;
+    chart.draw = function (...args) { const start = performance.now(); try { return realDraw.apply(this, args); } finally { drawMs += performance.now() - start; } };
+    const bursts = [];
+    try {
+      for (let burst = 0; burst < 7; burst++) {
+        drawMs = 0;
+        const start = performance.now();
+        for (const deltaY of [-1, 1, -1, 1]) chart.onScrollWheel(event(deltaY)); // in/out: view stays put
+        const handlerMs = performance.now() - start;
+        const drawnDuringHandlers = drawMs;
+        await new Promise((resolve) => setTimeout(resolve, 50)); // let a scheduled frame run
+        bursts.push(handlerMs + (drawMs - drawnDuringHandlers));
+      }
+    } finally {
+      chart.draw = realDraw;
+      chart.resetView();
+    }
+    bursts.sort((a, b) => a - b);
+    const time = bursts[3];
+    t.diagnostic(`scroll burst (4 events), 100k points: ${ms(time)} of work (median of 7)`);
+    assert.ok(time < 800, `took ${ms(time)}`);
+  });
+});
+
 describe('Redraw count', () => {
   test('PERF-04: a burst of 4 scroll events in one frame causes at most 1 redraw', {
     todo: 'Performance: every wheel event redraws immediately, so a fast trackpad scroll redraws 4 times per frame. '

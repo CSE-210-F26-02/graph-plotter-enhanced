@@ -108,6 +108,7 @@ Measured in Chrome with 100,000 rows: a scatter redraw takes **16.6 ms**, a full
 | PERF-02 | 10× more points → redraw time | At most 30× | ~10× for both (linear) | Pass |
 | PERF-03 | Hover search over 100k points, per mouse move | Under 50 ms | 0.5 ms (5.2 ms in Chrome, which also moves the tooltip on the page) | Pass |
 | PERF-04 | Redraws caused by 4 scroll events in one frame | At most 1 | 4 | **Bug** (performance) |
+| PERF-05 | Work for a burst of 4 scroll events (100k points), including any redraw scheduled for the next frame | Under 800 ms | 44 ms | Pass |
 
 PERF-04 is the biggest measured win. In Chrome with 100k points, a fast scroll of 4 events per frame takes **52 ms per frame (~19 fps)**. Redrawing at most once per frame (`requestAnimationFrame`) brings that to **10 ms (~96 fps)**, and zoom still counts every event.
 
