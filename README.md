@@ -40,5 +40,6 @@ They also run on GitHub Actions for every push and pull request (`.github/workfl
 - `parser.test.js`: CSV parsing (`src/parser.js`)
 - `helpers.test.js`: axis ticks, number formatting, sanitizing, error classes
 - `chart.test.js`: `ChartElement` point filtering, axis mapping, zoom, pan, and tooltips, run against a fake DOM (`tests/helpers/fake-dom.js`)
+- `csv-edge-cases.test.js`: 37 edge-case CSV files (huge and negative numbers, blank values, missing or malformed headers, quotes, HTML in labels, failed uploads) sent through the real upload path in `app.js`. Expected vs. actual results: [`docs/qa/csv-edge-cases.md`](docs/qa/csv-edge-cases.md)
 
 A test marked `todo` describes a known bug: it runs and is reported, but does not fail the build. When the bug is fixed, the test passes; then remove its `todo` option so it guards the fix.
