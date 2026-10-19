@@ -27,3 +27,18 @@ python3 -m http.server 8000 --directory src
 npx serve src
 ```
 Then visit `http://localhost:8000` (or the port displayed).
+
+## Running tests
+Unit tests live in `tests/` and use Node's built-in test runner, so there is nothing to install. With Node 20 or newer:
+
+```bash
+npm test
+```
+
+They also run on GitHub Actions for every push and pull request (`.github/workflows/tests.yml`).
+
+- `parser.test.js`: CSV parsing (`src/parser.js`)
+- `helpers.test.js`: axis ticks, number formatting, sanitizing, error classes
+- `chart.test.js`: `ChartElement` point filtering, axis mapping, zoom, pan, and tooltips, run against a fake DOM (`tests/helpers/fake-dom.js`)
+
+A test marked `todo` describes a known bug: it runs and is reported, but does not fail the build. When the bug is fixed, the test passes; then remove its `todo` option so it guards the fix.
