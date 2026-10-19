@@ -7,22 +7,49 @@ import { niceTicks, fmt } from './helpers.js';
  * Refactored the chart drawing logic out into this file
  */
 
+/**
+ * @typedef {Object} ChartData
+ * @property {Array<Array<number>>} pts - All points represented by the chart.
+ * @property {function} sx - Function for scaling plot-space x-coordinates to element-relative screen space.
+ * @property {function} sy - Function for scaling plot-space y-coordinates to element-relative screen space.
+ * @property {number} xi - Index of the x-axis header
+ * @property {number} yi - Index of the y-axis header
+ * @property {string} type - Type of chart to be depicted. Can be either 'scatter' or 'line'.
+ * @property {number} L - Left margin extent of the plot relative to the canvas element, in pixels. Functions as base x-offset for graph region. 
+ * @property {number} T - Top margin extent of the plot relative to the canvas element, in pixels. Functions as base y-offset for graph region. 
+ * @property {number} pw - Plot width, in pixels.
+ * @property {number} ph - Plot height, in pixels.
+ * @property {number} W - Width of the canvas element depicting the chart, in pixels.
+ * @property {number} H - Width of the canvas element depicting the chart, in pixels.
+ */
+
+/**
+ * @typedef {Object} ZoomParameters
+ * @property {Number} xScale - The x scale factor of the chart. Ranges from MIN_ZOOM_SCALE to MAX_ZOOM_SCALE.
+ * @property {Number} yScale - The y scale factor of the chart. Ranges from MIN_ZOOM_SCALE to MAX_ZOOM_SCALE.
+ * @property {Number} xTranslate - The x translation factor of the chart. Ranges from 0.0 to 1.0, representing the left and right edges respectively.
+ * @property {Number} yTranslate - The y translation factor of the chart. Ranges from 0.0 to 1.0, representing the bottom and top edges respectively.
+ */
+
 const $ = id => document.getElementById(id);
-const tooltip = $('tooltip')
+
 const COLOR = '#2563eb', GRID = '#e8ebf0', TEXT = '#1c2330', MUTED = '#6b7585';
 
-const MIN_ZOOM_SCALE = 0.00002, MAX_ZOOM_SCALE = 10000;
+const MIN_ZOOM_SCALE = 0.00002, MAX_ZOOM_SCALE = 10;
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
 class ChartElement extends HTMLElement {
   // Formerly cv
   #canvas;
   #context;
+  #tooltip;
 
   graphRows = [];
   graphHeaders = [];
-  cachedPlot = { pts: [], sx: null, sy: null, xi: 0, yi: 0, type: 'scatter', x0: 0, x1: 0, y0: 0, y1: 0 };
-  // Zoom/Pan parameters expressed as percentages. For zoom (scale), 1.0 = no zoom and 0.0 = max zoom.
+  /** @type {ChartData} */
+  cachedPlot;
+  
+  /** @type {ZoomParameters} */
   zoomParameters = {xScale: 1.0, yScale: 1.0, xTranslate: 0.0, yTranslate: 0.0}
 
   // Drag and cursor state
@@ -35,8 +62,12 @@ class ChartElement extends HTMLElement {
     super();
 
     this.#canvas = document.createElement("canvas");
-    this.appendChild(this.#canvas);
     this.#context = this.#canvas.getContext('2d');
+    this.#tooltip = document.createElement("div");
+    this.appendChild(this.#canvas);
+    this.appendChild(this.#tooltip);
+    // Needed for CSS styling
+    this.#tooltip.id = "tooltip";
 
     this.addEventListener('mousedown', this.onMouseDown);
     this.addEventListener('mousemove', this.onMouseMove);
@@ -47,7 +78,7 @@ class ChartElement extends HTMLElement {
      */
     this.addEventListener('mouseleave', () => {
       this.stopDragging();
-      tooltip.style.display = 'none';
+      this.#tooltip.style.display = 'none';
     });
 
     this.addEventListener('mouseup', this.stopDragging);
@@ -115,8 +146,9 @@ class ChartElement extends HTMLElement {
     // TODO: do we need the if statement?
     if (type === 'line') pts.sort((a, b) => a[0] - b[0]);
 
+    const W = cv.clientWidth, H = cv.clientHeight;
     // size canvas for sharp rendering on retina screens
-    const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
     cv.width = W * dpr; cv.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
@@ -167,12 +199,12 @@ class ChartElement extends HTMLElement {
     const plotWidth = W - leftMargin - rightMargin;
     const plotHeight = H - topMargin - bottomMargin;
 
-    // Converts coordinates relative to plot space (in margins) to actual screen positions
-    const toScreenX = x => leftMargin + (x - xMin) / (xMax - xMin) * plotWidth;       // data -> pixel
-    const toScreenY = y => topMargin + plotHeight - (y - yMin) / (yMax - yMin) * plotHeight;
+    // Converts plot-space coordinates to ChartElement-relative screen positions.
+    const toElementX = x => leftMargin + (x - xMin) / (xMax - xMin) * plotWidth;       // data -> pixel
+    const toElementY = y => topMargin + plotHeight - (y - yMin) / (yMax - yMin) * plotHeight;
 
     // Cache plot geometry for hover tooltip and pan/zoom lookups
-    this.cachedPlot = { pts, sx: toScreenX, sy: toScreenY, xi, yi, type, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H };
+    this.cachedPlot = { pts, sx: toElementX, sy: toElementY, xi, yi, type, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H };
 
     // -- Draw --
 
@@ -180,7 +212,7 @@ class ChartElement extends HTMLElement {
     ctx.strokeStyle = GRID; ctx.fillStyle = MUTED;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (const tickX of niceTicks(xMin, xMax)) {
-      const sx = toScreenX(tickX);
+      const sx = toElementX(tickX);
       if (sx < leftMargin || sx > leftMargin + plotWidth) continue;
       ctx.beginPath(); 
       ctx.moveTo(sx, topMargin);
@@ -190,7 +222,7 @@ class ChartElement extends HTMLElement {
     }
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
     for (const tickY of yTicks) {
-      const sy = toScreenY(tickY);
+      const sy = toElementY(tickY);
       if (sy < topMargin || sy > topMargin + plotHeight) continue;
       ctx.beginPath(); 
       ctx.moveTo(leftMargin, sy);
@@ -216,7 +248,7 @@ class ChartElement extends HTMLElement {
     ctx.fillStyle = COLOR; ctx.strokeStyle = COLOR;
     if (type === 'line') {
       ctx.lineWidth = 2; ctx.beginPath();
-      pts.forEach(([x, y], i) => (i ? ctx.lineTo(toScreenX(x), toScreenY(y)) : ctx.moveTo(toScreenX(x), toScreenY(y))));
+      pts.forEach(([x, y], i) => (i ? ctx.lineTo(toElementX(x), toElementY(y)) : ctx.moveTo(toElementX(x), toElementY(y))));
       ctx.stroke();
     } else {
       ctx.globalAlpha = pts.length > 1000 ? 0.45 : 0.75;
@@ -224,7 +256,7 @@ class ChartElement extends HTMLElement {
       for (const [x, y] of pts) {
         // TODO: Move check somewhere else, knowing which points are in bounds is helpful elsewhere as well
         if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
-          ctx.beginPath(); ctx.arc(toScreenX(x), toScreenY(y), r, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(toElementX(x), toElementY(y), r, 0, Math.PI * 2); ctx.fill();
         }
       }
       ctx.globalAlpha = 1;
@@ -249,9 +281,9 @@ class ChartElement extends HTMLElement {
 
   /**
    * Checks if a point is inside the plot
-   * @param {number} x The x position of the point to check in pixel coordinates 
-   * @param {number} y 
-   * @returns 
+   * @param {number} x - The x position of the point to check, in plot-space pixel coordinates 
+   * @param {number} y - The y position of the point to check, in plot-space pixel coordinates 
+   * @returns {boolean} True if the point is within the plot boundaries, false otherwise.
    */
   isInsidePlot(x, y) {
     if (!this.cachedPlot) return false;
@@ -276,7 +308,7 @@ class ChartElement extends HTMLElement {
     this.dragStartX = e.clientX;
     this.dragStartY = e.clientY;
     this.#canvas.style.cursor = 'grabbing';
-    tooltip.style.display = 'none';
+    this.#tooltip.style.display = 'none';
   }
 
   /**
@@ -284,7 +316,7 @@ class ChartElement extends HTMLElement {
   */
   onMouseMove(e) {
     if (!this.cachedPlot || !this.cachedPlot.pts.length || !this.cachedPlot.sx) {
-      tooltip.style.display = 'none';
+      this.#tooltip.style.display = 'none';
       return;
     }
 
@@ -337,12 +369,12 @@ class ChartElement extends HTMLElement {
     }
 
     if (closest) {
-      tooltip.style.display = 'block';
-      tooltip.style.left = `${closest.px}px`;
-      tooltip.style.top = `${closest.py}px`;
-      tooltip.textContent = `${this.graphHeaders[this.cachedPlot.xi]}: ${fmt(closest.x)}, ${this.graphHeaders[this.cachedPlot.yi]}: ${fmt(closest.y)}`;
+      this.#tooltip.style.display = 'block';
+      this.#tooltip.style.left = `${closest.px + rect.left}px`;
+      this.#tooltip.style.top = `${closest.py + rect.top}px`;
+      this.#tooltip.textContent = `${this.graphHeaders[this.cachedPlot.xi]}: ${fmt(closest.x)}, ${this.graphHeaders[this.cachedPlot.yi]}: ${fmt(closest.y)}`;
     } else {
-      tooltip.style.display = 'none';
+      this.#tooltip.style.display = 'none';
     }
   }
 
@@ -352,7 +384,7 @@ class ChartElement extends HTMLElement {
   onScrollWheel(e) {
     if (!this.cachedPlot.pts || !this.cachedPlot.pts.length || !this.cachedPlot.pw || !this.cachedPlot.ph) return;
     e.preventDefault();
-    tooltip.style.display = 'none';
+    this.#tooltip.style.display = 'none';
 
     const rect = this.#canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
