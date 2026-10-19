@@ -25,7 +25,7 @@ const adjustSaveButtonSize = () => {
   // Set the save button position based on the title height
   const saveButton = document.querySelector('#dl:not(.control-wrapper #dl)');
   if (saveButton) {
-    saveButton.style.minHeight = `${trueHeight}px`;
+    saveButton.style.minHeight = `${Math.max(32, trueHeight)}px`;
   }
 };
 
