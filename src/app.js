@@ -1,9 +1,10 @@
-import { clearChart, draw, getNumberOfPointsPlotted } from './chart.js';
+import { ChartElement } from './chart.js';
 import { InvalidFileError, NoDataFoundError, NotEnoughColumnsError } from './errors.js';
 import { sanitizeInput } from './helpers.js';
 
+
 const $ = id => document.getElementById(id);
-const cv = $('cv'), ctx = cv.getContext('2d');
+const chart = $('demo-chart');
 const chartWrap = $('chart-wrap');
 
 const showWhichSaveButton = () => {
@@ -19,7 +20,7 @@ const showWhichSaveButton = () => {
 
 const adjustSaveButtonSize = () => {
   if (!$('title').value) return;
-  const metrics = ctx.measureText($('title').value);
+  const metrics = chart.chartContext.measureText($('title').value);
   const trueHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
 
   // Set the save button position based on the title height
@@ -29,7 +30,7 @@ const adjustSaveButtonSize = () => {
   }
 };
 
-const drawGraph = () => draw(
+const drawGraph = () => chart.draw(
   rows,
   headers,
   +$('xs').value,
@@ -37,7 +38,7 @@ const drawGraph = () => draw(
   $('type').value,
   () => {
     $('status').textContent =
-      `${fileName}: ${rows.length} rows, ${getNumberOfPointsPlotted()} points plotted.`;
+      `${fileName}: ${rows.length} rows, ${chart.getNumberOfPointsPlotted()} points plotted.`;
   }
 );
 
@@ -49,7 +50,7 @@ function validateCSVFile(file) {
 
   const message = 'Wrong file type. Please upload a CSV file.';
 
-  clearChart(message,'#dc2626');
+  chart.clearChart(message,'#dc2626');
   $('err').textContent = message;
 
   return false;
@@ -93,15 +94,17 @@ function load(text, name) {
     });
     $('xs').value = numeric[0];
     $('ys').value = numeric[1];
+    // New data: drop the previous zoom/pan so the whole dataset is visible
+    chart.resetView();
     drawGraph();
     adjustSaveButtonSize();
   } catch (err) {
     if (err instanceof InvalidFileError || err instanceof NoDataFoundError || err instanceof NotEnoughColumnsError) {
-      clearChart(err.message);
+      chart.clearChart(err.message);
       $('err').textContent = err.message;
     } else {
-      clearChart('Unknown error occurred.');
-      $('err').textContent = "Unknown error occurred.";
+      chart.clearChart('Unknown error occurred.');
+      $('err').textContent = err.message;
     }
 
     // Reset headers, rows, and file name
@@ -154,6 +157,8 @@ $('sample').onclick = () => {
 /* Resize handler */
 
 ['xs', 'ys', 'type'].forEach(id => ($(id).onchange = () => {
+  // Different columns have a different range, so start from the full view
+  if (id !== 'type') chart.resetView();
   drawGraph();
   adjustSaveButtonSize();
 }));
@@ -249,13 +254,13 @@ const downloadChart = () => {
     if (!rows.length) return;
 
   const c = document.createElement('canvas');
-  c.width = cv.width;
-  c.height = cv.height;
+  c.width = chart.chartCanvas.width;
+  c.height = chart.chartCanvas.height;
 
   const g = c.getContext('2d');
   g.fillStyle = '#fff';
   g.fillRect(0, 0, c.width, c.height);
-  g.drawImage(cv, 0, 0);
+  g.drawImage(chart.chartCanvas, 0, 0);
 
   const a = document.createElement('a');
   a.download = 'chart.png';
