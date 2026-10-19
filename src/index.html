@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -24,11 +25,11 @@
     }
 
     /* Changed: Preserve the existing heading size while updating its color. */
-    main > h1 {
+    main>h1 {
       color: #272b33;
     }
 
-    main > .sub,
+    main>.sub,
     #status {
       color: #737983;
     }
@@ -128,7 +129,8 @@
 
     /* Changed: Match button height, corners, and neutral colors. */
     .plot-controls .ui-button,
-    #chart-wrap > .save-button {
+    #chart-wrap>.save-button,
+    #chart-wrap>.control-wrapper>.save-button {
       box-sizing: border-box;
       display: inline-flex;
       align-items: center;
@@ -151,7 +153,7 @@
     }
 
     .plot-controls .ui-button:hover,
-    #chart-wrap > .save-button:hover {
+    #chart-wrap>.save-button:hover {
       background: #eceef1;
       border-color: #c1c6ce;
     }
@@ -184,9 +186,9 @@
       white-space: nowrap;
     }
 
-    .file-input:focus-visible + .ui-button,
+    .file-input:focus-visible+.ui-button,
     .plot-controls button:focus-visible,
-    #chart-wrap > .save-button:focus-visible {
+    #chart-wrap>.save-button:focus-visible {
       outline: 2px solid #7a818c;
       outline-offset: 3px;
     }
@@ -218,9 +220,7 @@
 
     .settings-row.axis-row {
       grid-template-columns:
-        minmax(0, 1fr)
-        minmax(0, 1fr)
-        minmax(190px, 1.15fr);
+        minmax(0, 1fr) minmax(0, 1fr) minmax(190px, 1.15fr);
     }
 
     .settings-row.title-row {
@@ -229,9 +229,7 @@
 
     .settings-row.label-row {
       grid-template-columns:
-        minmax(0, 1fr)
-        minmax(0, 1fr)
-        112px;
+        minmax(0, 1fr) minmax(0, 1fr) 112px;
     }
 
     .settings-panel .field {
@@ -246,8 +244,8 @@
     }
 
     /* Changed: Give text inputs and selects matching dimensions. */
-    .settings-panel .field > input,
-    .settings-panel .field > select {
+    .settings-panel .field>input,
+    .settings-panel .field>select {
       display: block;
       width: 100%;
       min-width: 0;
@@ -267,8 +265,8 @@
       color: #9298a1;
     }
 
-    .settings-panel .field > input:focus,
-    .settings-panel .field > select:focus {
+    .settings-panel .field>input:focus,
+    .settings-panel .field>select:focus {
       border-color: #8b929d;
       outline: 2px solid rgba(110, 118, 130, 0.12);
       outline-offset: 1px;
@@ -342,13 +340,12 @@
     }
 
     .settings-panel .font-size-control select {
-      flex: 0 0 32px;
-      width: 32px;
-      min-width: 32px;
+      flex: 1 0;
+      /* I removed the fixed 32px width to allow flexible sizing and add padding for the selector */
       height: 100%;
       box-sizing: border-box;
       margin: 0;
-      padding: 0;
+      padding: 8px;
       border: 0;
       border-radius: 0;
       background: transparent;
@@ -391,12 +388,22 @@
       box-shadow: 0 2px 8px rgba(25, 30, 40, 0.025);
     }
 
-    #chart-wrap > .save-button {
+    #chart-wrap >.save-button {
       position: absolute;
-      top: 12px;
-      right: 12px;
+      top: 10px;
+      right: 10px;
       z-index: 2;
       min-height: 32px;
+    }
+
+    #chart-wrap>.control-wrapper {
+      display: flex;
+      justify-content: flex-end;
+      padding: 4px;
+    }
+
+    #chart-wrap>.save-button,
+    #chart-wrap>.control-wrapper>.save-button {
       padding: 0 12px;
       border-color: transparent;
       background: #f1f3f5;
@@ -436,6 +443,7 @@
         width: 112px;
       }
     }
+
     /* Changed: Match the sample button to the Choose File button. */
     .plot-controls #sample {
       background: #e5e6e8;
@@ -472,17 +480,12 @@
           <p class="upload-title">Drop your file here</p>
           <p class="upload-hint">CSV file</p>
 
-          <input
-            type="file"
-            id="file"
-            class="file-input"
-            accept=".csv"
-          >
+          <input type="file" id="file" class="file-input" accept=".csv">
 
           <label for="file" class="ui-button primary">
             <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z"/>
-            </svg> 
+              <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z" />
+            </svg>
             Choose File
           </label>
 
@@ -490,7 +493,7 @@
 
           <button id="sample" class="ui-button secondary">
             <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 20h16M6 17v-6h3v6M11 17V5h3v12M16 17V8h3v9"/>
+              <path d="M4 20h16M6 17v-6h3v6M11 17V5h3v12M16 17V8h3v9" />
             </svg>
             Use sample data
           </button>
@@ -517,31 +520,22 @@
 
           <!-- Added: Switch chart types with visible buttons. -->
           <div class="chart-type-buttons" role="group" aria-label="Chart type">
-            <button
-              type="button"
-              class="ui-button chart-type-button is-active"
-              data-chart-type="scatter"
-              aria-pressed="true"
-            >
+            <button type="button" class="ui-button chart-type-button is-active" data-chart-type="scatter"
+              aria-pressed="true">
               <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="6" cy="7" r="1"/>
-                <circle cx="12" cy="5" r="1"/>
-                <circle cx="18" cy="9" r="1"/>
-                <circle cx="8" cy="15" r="1"/>
-                <circle cx="15" cy="17" r="1"/>
-                <circle cx="19" cy="14" r="1"/>
+                <circle cx="6" cy="7" r="1" />
+                <circle cx="12" cy="5" r="1" />
+                <circle cx="18" cy="9" r="1" />
+                <circle cx="8" cy="15" r="1" />
+                <circle cx="15" cy="17" r="1" />
+                <circle cx="19" cy="14" r="1" />
               </svg>
               Scatter
             </button>
 
-            <button
-              type="button"
-              class="ui-button chart-type-button"
-              data-chart-type="line"
-              aria-pressed="false"
-            >
+            <button type="button" class="ui-button chart-type-button" data-chart-type="line" aria-pressed="false">
               <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 5v14h16M7 15l4-5 4 2 5-7"/>
+                <path d="M4 5v14h16M7 15l4-5 4 2 5-7" />
               </svg>
               Line
             </button>
@@ -557,19 +551,9 @@
           <label class="field">
             Title size
             <span class="font-size-control">
-              <input
-                type="number"
-                id="title-font-size"
-                min="8"
-                max="64"
-                step="1"
-                value="24"
-              >
+              <input type="number" id="title-font-size" min="8" max="64" step="1" value="24">
 
-              <select
-                id="title-font-preset"
-                aria-label="Choose title font size"
-              >
+              <select id="title-font-preset" aria-label="Choose title font size" class="font-preset">
                 <option value="" disabled>Custom</option>
                 <option value="8">8</option>
                 <option value="12">12</option>
@@ -605,19 +589,9 @@
           <label class="field">
             X/Y label size
             <span class="font-size-control">
-              <input
-                type="number"
-                id="axis-font-size"
-                min="8"
-                max="64"
-                step="1"
-                value="18"
-              >
+              <input type="number" id="axis-font-size" min="8" max="64" step="1" value="18">
 
-              <select
-                id="axis-font-preset"
-                aria-label="Choose axis label font size"
-              >
+              <select id="axis-font-preset" aria-label="Choose axis label font size" class="font-preset">
                 <option value="" disabled selected>Custom</option>
                 <option value="8">8</option>
                 <option value="12">12</option>
@@ -642,7 +616,7 @@
         <div class="settings-actions">
           <button id="generate" class="ui-button primary" type="button">
             <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 5v14h16M7 15l4-5 4 2 5-7"/>
+              <path d="M4 5v14h16M7 15l4-5 4 2 5-7" />
             </svg>
             Generate graph
           </button>
@@ -651,12 +625,21 @@
     </div>
 
     <div class="chart-container" id="chart-wrap">
+      <!-- Used when there's no title else some of the data gets cut off by the button -->
+      <div class="control-wrapper"> 
+        <button id="dl" class="save-button" type="button">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" />
+          </svg>
+          Save PNG
+        </button>
+      </div>
       <canvas id="cv"></canvas>
 
       <!-- Changed: Move the existing save button into the chart's top-right corner. -->
       <button id="dl" class="save-button" type="button">
         <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/>
+          <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" />
         </svg>
         Save PNG
       </button>
@@ -725,4 +708,5 @@
     });
   </script>
 </body>
+
 </html>

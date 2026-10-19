@@ -59,6 +59,9 @@ function clearChart(msg = '', color = MUTED) {
     ctx.textBaseline = 'middle';
     ctx.fillText(msg, W / 2, H / 2);
   }
+  // Clear both the cache and headers
+  cachedPlot = { pts: [], sx: null, sy: null, xi: 0, yi: 0, x0: 0, x1: 0, y0: 0, y1: 0 };
+  graphHeaders = [];
 }
 
 /**
@@ -98,9 +101,7 @@ function draw(
   let pts = [];
   for (const r of rows) {
     const x = Number(r[xi]), y = Number(r[yi]);
-    if (r[xi] !== '' && r[yi] !== '' && isFinite(x) && isFinite(y)) {
-      pts.push([x, y]);
-    }
+    if (r[xi]?.trim() !== '' && r[yi]?.trim() !== '' && isFinite(x) && isFinite(y)) pts.push([x, y]);
   }
 
   if (!pts.length) {
@@ -214,7 +215,10 @@ function draw(
   if ($('title').value) {
     ctx.font = `bold ${titleFontSize}px system-ui, sans-serif`;
     ctx.textBaseline = 'top';
-    ctx.fillText($('title').value, L + pw / 2, 10);
+    // Add some top padding for the title to avoid overlapping with the chart area.
+    const titlePadding = 10;
+
+    ctx.fillText($('title').value, L + pw / 2, titlePadding);
   }
 
   // data

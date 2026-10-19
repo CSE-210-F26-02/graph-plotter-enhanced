@@ -12,22 +12,29 @@ function parseCSV(text) {
   if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // remove BOM
   const out = [];
   let row = [], field = '', inQuotes = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
+  const lines = text.split(/\r\n|\n|\r/);
+  for (let l = 0; l < lines.length; l++) {
+    const line = lines[l];
+    field = '';
+    inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (line[i + 1] === '"') { field += '"'; i++; } // escaped quote
+          else inQuotes = false;
+        } else field += c;
+      } else if (field.trim() === '' && c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else field += c;
+    }
     if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; } // escaped quote
-        else inQuotes = false;
-      } else field += c;
-    } else if (c === '"') inQuotes = true;
-    else if (c === ',') { row.push(field); field = ''; }
-    else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++;
-      row.push(field); field = '';
-      if (row.length > 1 || row[0] !== '') out.push(row);
-      row = [];
-    } else field += c;
+      field += '"';
+    }
+    row.push(field);
+    field = '';
+    out.push(row);
+    row = [];
   }
   if (field !== '' || row.length) { row.push(field); out.push(row); }
   return out;
