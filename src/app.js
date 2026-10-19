@@ -160,6 +160,7 @@ $('sample').onclick = () => {
 $('title').oninput = () => {
   showWhichSaveButton();
   drawGraph();
+  adjustSaveButtonSize();
 };
 window.addEventListener('resize', () => {
   drawGraph();
