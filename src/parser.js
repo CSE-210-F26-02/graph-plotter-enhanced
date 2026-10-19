@@ -46,7 +46,6 @@ function parseCSV(text) {
       row = [];
     }
     if (finalLine) break;
-    console.log('Processed line ending at index:', m.index);
   }
   if (field !== '' || row.length) { row.push(field); out.push(row); }
   return out;
