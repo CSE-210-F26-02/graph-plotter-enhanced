@@ -44,7 +44,7 @@ function readFontSize(id, defaultSize) {
  * Defaults to an empty string.
  * @returns {void}
  */
-function clearChart(msg = '') {
+function clearChart(msg = '', color = MUTED) {
   const dpr = window.devicePixelRatio || 1;
   const W = cv.clientWidth || 800, H = cv.clientHeight || 480;
   cv.width = W * dpr;
@@ -53,7 +53,7 @@ function clearChart(msg = '') {
   ctx.clearRect(0, 0, W, H);
 
   if (msg) {
-    ctx.fillStyle = MUTED;
+    ctx.fillStyle = color;
     ctx.font = '14px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

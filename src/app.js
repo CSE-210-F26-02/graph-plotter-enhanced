@@ -18,6 +18,18 @@ const drawGraph = () => draw(
 
 let headers = [], rows = [], fileName = '';
 
+// Added: Reject non-CSV files and display an error on the chart.
+function validateCSVFile(file) {
+  if (/\.csv$/i.test(file.name)) return true;
+
+  const message = 'Wrong file type. Please upload a CSV file.';
+
+  clearChart(message,'#dc2626');
+  $('err').textContent = message;
+
+  return false;
+}
+
 // ---------- load data ----------
 /**
  * Loads CSV data into the application.
@@ -94,6 +106,10 @@ function load(text, name) {
 chartWrap.addEventListener('drop', e => {
   const f = e.dataTransfer && e.dataTransfer.files[0];
   if (!f) return;
+
+  // Added: Check files dropped onto the chart.
+  if (!validateCSVFile(f)) return;
+
   const reader = new FileReader();
   reader.onload = () => load(reader.result, f.name);
   reader.readAsText(f);
@@ -103,6 +119,12 @@ chartWrap.addEventListener('drop', e => {
 $('file').onchange = e => {
   const f = e.target.files[0];
   if (!f) return;
+
+  // Added: Check the file type before reading.
+  if (!validateCSVFile(f)) {
+    e.target.value = '';
+    return;
+  }
   const reader = new FileReader();
 
   reader.onload = () => {
