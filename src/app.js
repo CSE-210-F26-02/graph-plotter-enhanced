@@ -1,11 +1,11 @@
-import { clearChart, draw, getNumberOfPointsPlotted } from './chart.js';
+import { ChartElement } from './chart.js';
 
 const $ = id => document.getElementById(id);
-const cv = $('cv'), ctx = cv.getContext('2d');
+const chart = $('demo-chart');
 const chartWrap = $('chart-wrap');
 
 
-const drawGraph = () => draw(rows, headers, +$('xs').value, +$('ys').value, $('type').value, () => { $('status').textContent = `${fileName}: ${rows.length} rows, ${getNumberOfPointsPlotted()} points plotted.`; });
+const drawGraph = () => chart.draw(rows, headers, +$('xs').value, +$('ys').value, $('type').value, () => { $('status').textContent = `${fileName}: ${rows.length} rows, ${chart.getNumberOfPointsPlotted()} points plotted.`; });
 
 let headers = [], rows = [], fileName = '';
 
@@ -20,7 +20,7 @@ function load(text, name) {
   $('err').textContent = '';
   const all = parseCSV(text);
   if (all.length < 2) {
-    clearChart('No data rows found.');
+    chart.clearChart('No data rows found.');
     return ($('err').textContent = 'No data rows found.');
   }
   headers = all[0].map((h, i) => h.trim() || 'col' + (i + 1));
@@ -33,7 +33,7 @@ function load(text, name) {
     return sample.length > 0 && sample.filter(r => !isNaN(Number(r[j]))).length / sample.length >= 0.8;
   });
   if (numeric.length < 2) {
-    clearChart('Need at least two numeric columns.');
+    chart.clearChart('Need at least two numeric columns.');
     return ($('err').textContent = 'Need at least two numeric columns.');
   }
 
