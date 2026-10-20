@@ -34,7 +34,7 @@ const drawGraph = () => chart.draw(
   rows,
   headers,
   +$('xs').value,
-  +$('ys').value,
+  [+$('ys').value, +$('xs').value],
   $('type').value,
   () => {
     $('status').textContent =
@@ -64,22 +64,22 @@ function validateCSVFile(file) {
  */
 function load(text, name) {
   try {
-  $('err').textContent = '';
-  const all = parseCSV(text);
+    $('err').textContent = '';
+    const all = parseCSV(text);
 
-  if (all.length < 2) {
-    throw new NoDataFoundError('No data rows found.');
-  }
-  headers = all[0].map((h, i) => sanitizeInput(h).trim() || 'col' + (i + 1));
-  rows = all.slice(1);
-  fileName = name;
+    if (all.length < 2) {
+      throw new NoDataFoundError('No data rows found.');
+    }
+    headers = all[0].map((h, i) => sanitizeInput(h).trim() || 'col' + (i + 1));
+    rows = all.slice(1);
+    fileName = name;
 
-  // keep only columns where most values are numbers
-  const numeric = headers.map((_, j) => j).filter(j => {
-    const sample = rows.slice(0, 500).filter(r => r[j] && r[j].trim() !== '');
-    return sample.length > 0 &&
-      sample.filter(r => !isNaN(Number(r[j]))).length / sample.length >= 0.8;
-  });
+    // keep only columns where most values are numbers
+    const numeric = headers.map((_, j) => j).filter(j => {
+      const sample = rows.slice(0, 500).filter(r => r[j] && r[j].trim() !== '');
+      return sample.length > 0 &&
+        sample.filter(r => !isNaN(Number(r[j]))).length / sample.length >= 0.8;
+    });
 
     if (numeric.length < 2) {
       throw new NotEnoughColumnsError('Need at least two numeric columns.');

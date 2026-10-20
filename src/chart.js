@@ -10,10 +10,11 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
 /**
  * @typedef {Object} ChartData
  * @property {Array<Array<number>>} pts - All points represented by the chart.
+ * @property {Array<Array<number>>} dataSetPtIndices - Arrays for each plotted data set consisting of indices into 'pts'.
  * @property {function} sx - Function for scaling plot-space x-coordinates to element-relative screen space.
  * @property {function} sy - Function for scaling plot-space y-coordinates to element-relative screen space.
  * @property {number} xi - Index of the x-axis header
- * @property {number} yi - Index of the y-axis header
+ * @property {Array<number>} yi - Indices of the y-axis headers
  * @property {string} type - Type of chart to be depicted. Can be either 'scatter' or 'line'.
  * @property {number} L - Left margin extent of the plot relative to the canvas element, in pixels. Functions as base x-offset for graph region. 
  * @property {number} T - Top margin extent of the plot relative to the canvas element, in pixels. Functions as base y-offset for graph region. 
@@ -32,7 +33,8 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
  */
 
 const $ = id => document.getElementById(id);
-const COLOR = '#2563eb', GRID = '#e8ebf0', TEXT = '#1c2330', MUTED = '#6b7585';
+const PLOT_ELEMENT_COLORS = ['#2563eb' , '#f8de6b', '#93f86b', '#f24747'];
+const GRID = '#e8ebf0', TEXT = '#1c2330', MUTED = '#6b7585';
 
 const MIN_ZOOM_SCALE = 0.00002, MAX_ZOOM_SCALE = 10;
 // Smallest visible range relative to the data's magnitude; below this, doubles can't tell ticks apart
@@ -131,7 +133,7 @@ class ChartElement extends HTMLElement {
    * @param {string[]} headers - The headers corresponding to the data columns.
    * @param {number} xs - The index of the X-axis column.
    * By default, it uses the value from the 'xs' select element.
-   * @param {number} ys - The index of the Y-axis column.
+   * @param {Array<number>} ys - The indices for each y-column.
    * By default, it uses the value from the 'ys' select element.
    * @param {string} type - The type of chart ('line' or 'scatter').
    * By default, it uses the value from the 'type' select element.
@@ -144,7 +146,7 @@ class ChartElement extends HTMLElement {
     rows, 
     headers, 
     xs = +$('xs').value, 
-    ys = +$('ys').value, 
+    ys = [+$('ys').value],
     type =$('type').value, 
     completionHandler = null
   ) {
@@ -157,7 +159,8 @@ class ChartElement extends HTMLElement {
 
     // Added: Use custom axis names when provided; otherwise use column names.
     const xLabel = $('xlabel').value.trim() || headers[xi];
-    const yLabel = $('ylabel').value.trim() || headers[yi];
+    // TODO: defaulting to first y header, not sure how we want UI to work for multiple.
+    const yLabel = $('ylabel').value.trim() || headers[yi[0]];
 
     // Added: Read the shared axis-label size and the separate title size.
     const axisFontSize = this.readFontSize('axis-font-size', 18);
@@ -167,9 +170,26 @@ class ChartElement extends HTMLElement {
 
     // Read points from 'rows' into 'pts'
     let pts = [];
+    let dataSetIndices = [];
+    // Empty array for each y-index
+    for (const _ of ys) dataSetIndices.push([]);
+
     for (const r of rows) {
-      const x = Number(r[xi]), y = Number(r[yi]);
-      if (r[xi]?.trim() !== '' && r[yi]?.trim() !== '' && isFinite(x) && isFinite(y)) pts.push([x, y]);
+      if (r[xi]?.trim() !== '') {
+        const x = Number(r[xi]);
+        for (let i = 0; i < ys.length; i++) {
+          const yHeaderIndex = ys[i];
+          if (r[yHeaderIndex]?.trim() !== '') {
+            const y = Number(r[yHeaderIndex]);
+            if (isFinite(x) && isFinite(y)) {
+              // Push the point coordinates along with y-label index.
+              pts.push([x, y]);
+              // Store new index in appropriate dataSet array.
+              dataSetIndices[i].push(pts.length - 1);
+            }
+          }
+        }
+      }
     }
 
     if (!pts.length) {
@@ -180,8 +200,12 @@ class ChartElement extends HTMLElement {
     if (!this.isDragging && !this.zoomCursorTimeout) cv.style.cursor = 'grab';
 
     // TODO: do we need the if statement?
-    if (type === 'line') pts.sort((a, b) => a[0] - b[0]);
+    //if (type === 'line') pts.sort((a, b) => a[0] - b[0]);
 
+    // Sort within sets, doesn't touch pts iteself
+    for (let i = 0; i < ys.length; i++) {
+      dataSetIndices[i].sort((a, b) => {return pts[a][0] - pts[b][0]});
+    }
     
     // size canvas for sharp rendering on retina screens
     const dpr = window.devicePixelRatio || 1;
@@ -244,7 +268,7 @@ class ChartElement extends HTMLElement {
     const toElementY = y => topMargin + plotHeight - (y - yMin) / (yMax - yMin) * plotHeight;
 
     // Cache plot geometry for hover tooltip and pan/zoom lookups
-    this.cachedPlot = { pts, sx: toElementX, sy: toElementY, xi, yi, type, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H,
+    this.cachedPlot = { pts, dataSetPtIndices: dataSetIndices, sx: toElementX, sy: toElementY, xi, yi, type, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H,
       xRange, yRange,
       xAbs: Math.max(Math.abs(ptsXMin), Math.abs(ptsXMax)),
       yAbs: Math.max(Math.abs(ptsYMin), Math.abs(ptsYMax)) };
@@ -322,24 +346,32 @@ class ChartElement extends HTMLElement {
     ctx.rect(leftMargin, topMargin, plotWidth, plotHeight);
     ctx.clip();
 
-    ctx.fillStyle = COLOR; 
-    ctx.strokeStyle = COLOR;
+
     if (type === 'line') {
       ctx.lineWidth = 2; 
-      ctx.beginPath();
-      pts.forEach(([x, y], i) => (
-        i ? ctx.lineTo(toElementX(x), toElementY(y)) : ctx.moveTo(toElementX(x), toElementY(y))
-      ));
-      ctx.stroke();
+      for (let ds = 0; ds < this.cachedPlot.dataSetPtIndices.length; ds++) {
+        ctx.fillStyle = PLOT_ELEMENT_COLORS[ds % PLOT_ELEMENT_COLORS.length]; 
+        ctx.strokeStyle = PLOT_ELEMENT_COLORS[ds % PLOT_ELEMENT_COLORS.length];
+        ctx.beginPath();
+        this.cachedPlot.dataSetPtIndices[ds].forEach((ptIndex, i) => (
+          i ? ctx.lineTo(toElementX(pts[ptIndex][0]), toElementY(pts[ptIndex][1])) : ctx.moveTo(toElementX(pts[ptIndex][0]), toElementY(pts[ptIndex][1]))
+        ));
+        ctx.stroke();
+      }
     } else {
       ctx.globalAlpha = pts.length > 1000 ? 0.45 : 0.75;
       const r = pts.length > 5000 ? 2 : 4;
-      for (const [x, y] of pts) {
-        // TODO: Move check somewhere else, knowing which points are in bounds is helpful elsewhere as well
-        if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
-          ctx.beginPath(); 
-          ctx.arc(toElementX(x), toElementY(y), r, 0, Math.PI * 2);
-          ctx.fill();
+      for (let ds = 0; ds < this.cachedPlot.dataSetPtIndices.length; ds++) {
+        ctx.fillStyle = PLOT_ELEMENT_COLORS[ds % PLOT_ELEMENT_COLORS.length]; 
+        ctx.strokeStyle = PLOT_ELEMENT_COLORS[ds % PLOT_ELEMENT_COLORS.length];
+        for (const ptIndex of this.cachedPlot.dataSetPtIndices[ds]) {
+          const x = pts[ptIndex][0], y = pts[ptIndex][1];
+          // TODO: Move check somewhere else, knowing which points are in bounds is helpful elsewhere as well
+          if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
+            ctx.beginPath(); 
+            ctx.arc(toElementX(x), toElementY(y), r, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       }
       ctx.globalAlpha = 1;
@@ -453,13 +485,15 @@ class ChartElement extends HTMLElement {
     // Search for the closest point within 10px radius
     let closest = null, minD2 = 100;
     if (insidePlot) {
-      for (let i = 0; i < this.cachedPlot.pts.length; i++) {
-        const p = this.cachedPlot.pts[i];
-        const px = this.cachedPlot.sx(p[0]), py = this.cachedPlot.sy(p[1]);
-        const d2 = (mouseX - px) ** 2 + (mouseY - py) ** 2;
-        if (d2 < minD2) {
-          minD2 = d2;
-          closest = { x: p[0], y: p[1], px, py };
+      for (let dsIndex = 0; dsIndex < this.cachedPlot.dataSetPtIndices.length; dsIndex++) {
+        for (const ptIndex of this.cachedPlot.dataSetPtIndices[dsIndex]) {
+          const p = this.cachedPlot.pts[ptIndex];
+          const px = this.cachedPlot.sx(p[0]), py = this.cachedPlot.sy(p[1]);
+          const d2 = (mouseX - px) ** 2 + (mouseY - py) ** 2;
+          if (d2 < minD2) {
+            minD2 = d2;
+            closest = { x: p[0], y: p[1], dsIndex: dsIndex, px, py };
+          }
         }
       }
     }
@@ -469,7 +503,7 @@ class ChartElement extends HTMLElement {
       this.#tooltip.style.left = `${closest.px}px`;
       this.#tooltip.style.top = `${closest.py}px`;
       this.#tooltip.textContent = 
-        `${this.graphHeaders[this.cachedPlot.xi]}: ${fmt(closest.x)}, ${this.graphHeaders[this.cachedPlot.yi]}: ${fmt(closest.y)}`;
+        `${this.graphHeaders[this.cachedPlot.xi]}: ${fmt(closest.x)}, ${this.graphHeaders[this.cachedPlot.yi[closest.dsIndex]]}: ${fmt(closest.y)}`;
     } else {
       this.#tooltip.style.display = 'none';
     }
