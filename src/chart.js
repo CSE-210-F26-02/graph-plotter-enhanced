@@ -37,6 +37,8 @@ const COLOR = '#2563eb', GRID = '#e8ebf0', TEXT = '#1c2330', MUTED = '#6b7585';
 const MIN_ZOOM_SCALE = 0.00002, MAX_ZOOM_SCALE = 10;
 // Smallest visible range relative to the data's magnitude; below this, doubles can't tell ticks apart
 const MIN_RELATIVE_RANGE = 1e-12;
+// How far (px) a finger can wander and still count as a tap rather than a drag
+const DRAG_THRESHOLD = 10;
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
 class ChartElement extends HTMLElement {
@@ -73,6 +75,10 @@ class ChartElement extends HTMLElement {
     this.addEventListener('mousedown', this.onMouseDown);
     this.addEventListener('mousemove', this.onMouseMove);
     this.addEventListener('wheel', this.onScrollWheel, { passive: false });
+    this.addEventListener('touchstart', this.onTouchStart, { passive: false });
+    this.addEventListener('touchmove', this.onTouchMove, { passive: false });
+    this.addEventListener('touchend', this.onTouchEnd);
+    this.addEventListener('touchcancel', this.onTouchEnd);
 
     /**
      * Hides the tooltip and cancels dragging when the mouse leaves the canvas.
@@ -525,6 +531,113 @@ class ChartElement extends HTMLElement {
     this.draw(this.graphRows, this.graphHeaders, this.cachedPlot.xi, this.cachedPlot.yi, this.cachedPlot.type);
   }
 
+  /* Variable to track the distance between two touch points for touch operations */
+  // Know how far apart the screen moved to get a zoom factor for pinch-zooming; null when not pinching
+  lastTouchDistance = null;
+  tapPoint = null;
+
+  /**
+   * Calculates the distance between two touch points.
+   * @param {TouchList} touches - An array of the current and last touch points.
+   * @returns {number} The distance between the two touch points.
+   */
+  getTouchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /**
+   * Handles touch start events for tapping, panning and pinch-zooming.
+   * @param {TouchEvent} e - The touch event object.
+   */
+  onTouchStart(e) {
+    if (!this.cachedPlot || !this.cachedPlot.pts.length || !this.cachedPlot.pw || !this.cachedPlot.ph) return;
+    if (e.touches.length === 1) {
+      /* Tap or drag gesture detected; initiate dragging if the touch is within the plot area. */
+      this.onMouseDown(e.touches[0]);
+      if (this.isDragging) {
+        e.preventDefault();
+        this.tapPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+    } else if (e.touches.length === 2) {
+      /* Pinch-to-zoom gesture detected; cancel any ongoing drag and record the initial distance between the two touch points. */
+      e.preventDefault();
+      this.tapPoint = null;
+      this.stopDragging();
+      this.lastTouchDistance = this.getTouchDistance(e.touches);
+    }
+  }
+
+  /**
+   * Handles touch move events for detecting panning and pinch-zooming.
+   * If zooming handles the zooming, otherwise it pans and redraws exactly like a mouse drag.
+   * @param {TouchEvent} e - The touch event object.
+   */
+  onTouchMove(e) {
+    if (!this.cachedPlot || !this.cachedPlot.pts.length || !this.cachedPlot.pw || !this.cachedPlot.ph) return;
+
+    if (e.touches.length === 1 && this.isDragging) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      if (this.tapPoint) {
+        const moved = Math.hypot(touch.clientX - this.tapPoint.x, touch.clientY - this.tapPoint.y);
+        if (moved < DRAG_THRESHOLD) return;
+        this.tapPoint = null;
+      }
+      // Pans and redraws exactly like a mouse drag
+      this.onMouseMove(touch);
+    } else if (e.touches.length === 2 && this.lastTouchDistance !== null) {
+      e.preventDefault();
+      const currentDistance = this.getTouchDistance(e.touches);
+      const zoomFactor = currentDistance / this.lastTouchDistance;
+
+      // Adjust zoom based on pinch gesture
+      const zoomingIn = zoomFactor > 1;
+      const factor = zoomingIn ? 0.9 : 1.1;
+
+      const oldXScale = this.zoomParameters.xScale;
+      const oldYScale = this.zoomParameters.yScale;
+
+      let newXScale = clamp(oldXScale * factor, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
+      let newYScale = clamp(oldYScale * factor, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
+
+      // Stop zooming in once the view would be narrower than floating point can resolve
+      if (zoomingIn) {
+        const { xRange, yRange, xAbs, yAbs } = this.cachedPlot;
+        newXScale = Math.max(newXScale, Math.min(oldXScale, xAbs * MIN_RELATIVE_RANGE / xRange));
+        newYScale = Math.max(newYScale, Math.min(oldYScale, yAbs * MIN_RELATIVE_RANGE / yRange));
+      }
+
+      this.zoomParameters.xScale = newXScale;
+      this.zoomParameters.yScale = newYScale;
+
+      this.draw(this.graphRows, this.graphHeaders, this.cachedPlot.xi, this.cachedPlot.yi, this.cachedPlot.type);
+
+      this.lastTouchDistance = currentDistance;
+    }
+  }
+
+  /**
+   * Handles touch end events for tapping, panning and pinch-zooming.
+   * @param {TouchEvent} e - The touch event object.
+   */
+  onTouchEnd(e) {
+    if (e.touches.length === 0) {
+      this.stopDragging();
+      this.lastTouchDistance = null;
+      if (this.tapPoint && e.type === 'touchend') {
+        this.onMouseMove(e.changedTouches[0]);
+      }
+      this.tapPoint = null;
+    } else if (e.touches.length === 1) {
+      /* Lifting one finger of a pinch resumes panning with the remaining finger */
+      this.lastTouchDistance = null;
+      this.tapPoint = null;
+      this.onMouseDown(e.touches[0]);
+    }
+  }
+
   /**
    * Getter for chart's canvas. Only used for downloading.
    */
@@ -541,6 +654,8 @@ class ChartElement extends HTMLElement {
     return this.#context;
   }
 }
+
+
 
 customElements.define('custom-chart', ChartElement);
 
