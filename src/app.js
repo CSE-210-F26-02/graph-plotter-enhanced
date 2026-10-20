@@ -132,6 +132,7 @@ $('file').onchange = e => {
   // Added: Check the file type before reading.
   if (!validateCSVFile(f)) {
     e.target.value = '';
+    $('status').textContent = `Failed to load ${f.name}`;
     return;
   }
   const reader = new FileReader();
