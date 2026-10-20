@@ -10,7 +10,9 @@
  * Import this BEFORE anything from src/.
  */
 import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
+import { parseCSV } from '../../src/parser.js';
+
+globalThis.parseCSV ??= parseCSV;
 
 const pageIds = new Set(
   [...readFileSync(new URL('../../src/index.html', import.meta.url), 'utf8').matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]),
@@ -114,8 +116,3 @@ globalThis.document ??= {
   querySelector: () => fakeElement(),
 };
 
-// parser.js is a classic <script> in index.html, so parseCSV is a page global.
-// Run the real file and expose it the same way.
-const sandbox = vm.createContext({});
-vm.runInContext(readFileSync(new URL('../../src/parser.js', import.meta.url), 'utf8'), sandbox, { filename: 'parser.js' });
-globalThis.parseCSV ??= sandbox.parseCSV;

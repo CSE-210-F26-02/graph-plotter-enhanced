@@ -9,7 +9,8 @@ const MAX_TICKS = 50;
  * @returns {number} The step, or NaN if the range is empty or not finite.
  */
 function niceStep(min, max, count = 6) {
-  const raw = (max - min) / count;
+  let raw = (max - min) / count;
+  if (raw == 0 && (max >= Number.MAX_SAFE_INTEGER || min <= Number.MIN_SAFE_INTEGER)) raw = BigInt(max) - BigInt(min) / BigInt(count);
   if (!isFinite(raw) || raw <= 0) return NaN;
   const p = 10 ** Math.floor(Math.log10(raw));
   const m = raw / p;
@@ -80,20 +81,5 @@ function tickFormatter(min, max, count = 6) {
  */
 const fmt = v => String(+v.toPrecision(5));
 
-/**
- * Sanitize any string and remove potentially harmful characters or attacks
- * @param {string} str
- * @returns {string}
- */
-function sanitizeInput(str) {
-  
-    const entities = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-  };
 
-  return String(str).replace(/[&<>]/g, match => entities[match]);
-}
-
-export { niceTicks, tickFormatter, fmt, sanitizeInput };
+export { niceTicks, tickFormatter, fmt };
