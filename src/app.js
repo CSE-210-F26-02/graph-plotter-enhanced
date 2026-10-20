@@ -1,6 +1,6 @@
 import { ChartElement } from './chart.js';
-import { InvalidFileError, NoDataFoundError, NotEnoughColumnsError } from './errors.js';
-import { sanitizeInput } from './helpers.js';
+import { InvalidFileError, MalformedCSVError, NoDataFoundError, NotEnoughColumnsError } from './errors.js';
+import { parseCSV } from './parser.js';
 
 
 const $ = id => document.getElementById(id);
@@ -70,7 +70,7 @@ function load(text, name) {
   if (all.length < 2) {
     throw new NoDataFoundError('No data rows found.');
   }
-  headers = all[0].map((h, i) => sanitizeInput(h).trim() || 'col' + (i + 1));
+  headers = all[0].map((h, i) => h.trim() || 'col' + (i + 1));
   rows = all.slice(1);
   fileName = name;
 
@@ -99,7 +99,8 @@ function load(text, name) {
     drawGraph();
     adjustSaveButtonSize();
   } catch (err) {
-    if (err instanceof InvalidFileError || err instanceof NoDataFoundError || err instanceof NotEnoughColumnsError) {
+    $('status').textContent = `Something went wrong while loading ${name}`;
+    if (err instanceof InvalidFileError || err instanceof NoDataFoundError || err instanceof NotEnoughColumnsError || err instanceof MalformedCSVError) {
       chart.clearChart(err.message);
       $('err').textContent = err.message;
     } else {

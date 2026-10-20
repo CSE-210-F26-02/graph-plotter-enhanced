@@ -1,12 +1,11 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadParseCSV } from './helpers/load-parser.js';
 
 // A test marked { todo: '...' } describes behaviour we want but the code does
 // not have yet: it runs and is reported, but does not fail CI. Once the bug is
 // fixed the test passes; then delete the todo option so it guards the fix.
 
-const parseCSV = loadParseCSV();
+import { parseCSV } from '../src/parser.js';
 
 describe('parseCSV', () => {
   test('splits rows and fields', () => {

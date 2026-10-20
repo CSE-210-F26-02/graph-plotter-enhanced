@@ -39,10 +39,7 @@ describe('Very large and very small numbers', () => {
     assert.match(r.status, /3 rows, 2 points plotted/);
   });
 
-  test('EC-05: 30-digit integers either plot or give a clear error, never a blank chart', {
-    todo: 'Bug: both values round to the same double, the x range collapses to 0, axis positions become NaN '
-      + 'and the chart is blank while the status says "2 points plotted".',
-  }, () => {
+  test('EC-05: 30-digit integers either plot or give a clear error, never a blank chart', () => {
     const r = upload('x,y\n123456789012345678901234567890,1\n123456789012345678901234567891,2');
     assert.ok(r.error !== '' || axisIsFinite(), 'axis positions are NaN and no error is shown');
   });
@@ -209,18 +206,13 @@ describe('Scripts and HTML in labels', () => {
 });
 
 describe('After a failed upload', () => {
-  test('EC-31: the status no longer describes the previous file', {
-    todo: 'Bug: after "No data rows found.", the status still says "good.csv: 2 rows, 2 points plotted."',
-  }, () => {
+  test('EC-31: the status no longer describes the previous file', () => {
     upload('a,b\n1,2\n3,4', 'good.csv');
     const r = upload('a,b', 'bad.csv');
     assert.doesNotMatch(r.status, /good\.csv/);
   });
 
-  test('EC-32: a wrong file type leaves either the whole previous chart or none of it', {
-    todo: 'Bug: the chart is cleared but the old column names and status stay, and "Generate graph" '
-      + 'redraws the previous file.',
-  }, () => {
+  test('EC-32: a wrong file type leaves either the whole previous chart or none of it',  () => {
     upload('a,b\n1,2\n3,4', 'good.csv');
     const r = upload('a,b\n9,9', 'bad.txt');
     assert.equal(r.error, 'Wrong file type. Please upload a CSV file.');

@@ -5,6 +5,13 @@ class InvalidFileError extends Error {
   }
 }
 
+class MalformedCSVError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'MalformedCSVError';
+  }
+}
+
 class NoDataFoundError extends Error {
   constructor(message) {
     super(message);
@@ -26,4 +33,4 @@ class InvalidFileTypeError extends Error {
   }
 }
 
-export { InvalidFileError, NoDataFoundError, NotEnoughColumnsError, InvalidFileTypeError };
+export { InvalidFileError, MalformedCSVError, NoDataFoundError, NotEnoughColumnsError, InvalidFileTypeError };
