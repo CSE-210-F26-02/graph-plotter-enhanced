@@ -8,7 +8,7 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
  */
 
 /**
- * @typedef {Object} ChartData
+ * @typedef {HTMLCanvasElement} ChartData
  * @property {Array<Array<number>>} pts - All points represented by the chart.
  * @property {function} sx - Function for scaling plot-space x-coordinates to element-relative screen space.
  * @property {function} sy - Function for scaling plot-space y-coordinates to element-relative screen space.
@@ -41,6 +41,9 @@ const MIN_RELATIVE_RANGE = 1e-12;
 const DRAG_THRESHOLD = 10;
 const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
 
+/**
+ * Custom chart element that encapsulates the chart drawing logic and user interactions.
+ */
 class ChartElement extends HTMLElement {
   // Formerly cv
   #canvas;
@@ -374,6 +377,8 @@ class ChartElement extends HTMLElement {
 
   /**
   * Resets active drag state and restores the default grab cursor.
+  * @param {MouseEvent} e - The mouse event object.
+  * @returns {void}
   */
   stopDragging() {
     if (!this.isDragging) return;
@@ -397,6 +402,10 @@ class ChartElement extends HTMLElement {
     }
   }
 
+  /**
+   * Handles mouse down events for initiating drag-to-pan functionality.
+   * @param {MouseEvent} e - The mouse event object.
+   */
   onMouseDown(e) {
     if (!this.cachedPlot || !this.cachedPlot.pts.length) return;
     const rect = this.#canvas.getBoundingClientRect();
@@ -415,6 +424,9 @@ class ChartElement extends HTMLElement {
 
   /**
   * Handles drag-to-pan and hover tooltip functionality for the chart.
+  * 
+  * @param {MouseEvent} e - The mouse event object.
+  * @returns {void}
   */
   onMouseMove(e) {
     if (!this.cachedPlot || !this.cachedPlot.pts.length || !this.cachedPlot.sx) {
