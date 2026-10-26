@@ -26,10 +26,12 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
 /** NEW
  * @typedef {Object} ChartPointData - Represents data based solely on the chart's assigned points.
  * @property {Array<Array<number>>} pts - All points represented by the chart.
- * @property {number} xMin - Minimum x coordinate within the point set
- * @property {number} yMin - Minimum y coordinate within the point set
- * @property {number} xMax - Maximum x coordinate within the point set
- * @property {number} yMax - Maximum y coordinate within the point set
+ * @property {number} xMin - Minimum x coordinate within the point set.
+ * @property {number} yMin - Minimum y coordinate within the point set.
+ * @property {number} xMax - Maximum x coordinate within the point set.
+ * @property {number} yMax - Maximum y coordinate within the point set.
+ * @property {number} xRange - Range of x coordinates in the point set.
+ * @property {number} yRange - Range of y coordinates in the point set.
  */
 
 /** NEW
@@ -38,17 +40,18 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
  * @property {Array<string>} headers - List of headers availible for charting, read from input. Note both x and y use the same pool.
  * @property {number} xHeaderIndex - Index of the x-axis header (formerly xi)
  * @property {number} yHeaderIndex - Index of the y-axis header (formerly yi)
- * @property {number} axisFontSize 
+ * @property {number} axisFontSize - Font size for axis labels.
+ * @property {number} titleFontSize - Font size for title labels.
  */
 
 /** NEW
  * @typedef {Object} ChartUIDimensions - Dimensions used for UI scaling/alignment throughout the code, driven by chart's UI parameters.
- * @property {function} toElementY - Function for scaling plot-space x-coordinates to element-relative screen space. (Formerly sx)
- * @property {function} toElementX - Function for scaling plot-space y-coordinates to element-relative screen space. (Formerly sy)
- * @property {number} L - Left margin extent of the plot relative to the canvas element, in pixels. Functions as base x-offset for graph region. 
- * @property {number} T - Top margin extent of the plot relative to the canvas element, in pixels. Functions as base y-offset for graph region. 
- * @property {number} pw - Plot width, in pixels.
- * @property {number} ph - Plot height, in pixels.
+ * @property {number} leftMargin - Left margin extent of the plot relative to the canvas element, in pixels. Functions as base x-offset for graph region.
+ * @property {number} rightMargin - Right margin extent of the plot relative to the canvas element, in pixels.
+ * @property {number} topMargin - Top margin extent of the plot relative to the canvas element, in pixels. Functions as base y-offset for graph region.
+ * @property {number} bottomMargin - Bottom margin extent of the plot relative to the canvas element, in pixels.
+ * @property {number} plotWidth - Plot width, in pixels. Along with right and left margins, adds up to total canvas size in pixels.
+ * @property {number} plotHeight - Plot height, in pixels. Along with top and bottom margins, adds up to total canvas size in pixels.
  */
 
 /**
@@ -57,6 +60,16 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
  * @property {Number} yScale - The y scale factor of the chart. Ranges from MIN_ZOOM_SCALE to MAX_ZOOM_SCALE.
  * @property {Number} xTranslate - The x translation factor of the chart. Ranges from 0.0 to 1.0, representing the left and right edges respectively.
  * @property {Number} yTranslate - The y translation factor of the chart. Ranges from 0.0 to 1.0, representing the bottom and top edges respectively.
+ */
+
+/**
+ * @typedef {Object} ZoomDimensions
+ * @property {Number} xMin - Minimum x graph-coordinate in the zoomed frame.
+ * @property {Number} yMin - Minimum y graph-coordinate in the zoomed frame.
+ * @property {Number} xMax - Maximum x graph-coordinate in the zoomed frame.
+ * @property {Number} yMax - Maximum y graph-coordinate in the zoomed frame.
+ * @property {Number} xRange - Range of x values within zoomed frame.
+ * @property {Number} yRange - Range of y values within zoomed frame.
  */
 
 const $ = id => document.getElementById(id);
@@ -84,11 +97,14 @@ class ChartElement extends HTMLElement {
   /** @type {ChartUIParameters} */
   uiParameters;
 
+  /** @type {ChartUIDimensions} */
+  uiDimensions;
+
   /** @type {ZoomParameters} */
   zoomParameters = {xScale: 1.0, yScale: 1.0, xTranslate: 0.0, yTranslate: 0.0}
 
-  /** @type {ChartUIDimensions} */
-  uiDimensions;
+  /** @type {ZoomDimensions} */
+  zoomDimensions;
 
   // Drag and cursor state
   isDragging = false;
@@ -166,21 +182,10 @@ class ChartElement extends HTMLElement {
     this.#tooltip.style.display = 'none';
   }
 
-  /**
-   * Draws the chart on the canvas based on the current data and selected options.
-   * @param {string[][]} rows - The data rows to be plotted.
-   * @param {string[]} headers - The headers corresponding to the data columns.
-   * @param {number} xHeaderIndex - The index of the X-axis column.
-   * @param {number} yHeaderIndex - The index of the Y-axis column.
-   * @param {string} type - The type of chart ('line' or 'scatter').
-   * @param {function|null} [completionHandler=null] -
-   * Optional callback to be executed after the chart is drawn.
-   * @returns {void}
+  /** Updates the ptData structure of the chart.
+   * @param {string[][]} data - The data to be plotted, as row, col strings from a CSV file.
    */
-  updateCache(rows, headers, xHeaderIndex, yHeaderIndex, type, completionHandler = null) {
-    const cv = this.#canvas;
-    const ctx = this.#context;
-
+  updatePointData(data){
     if (!rows.length) return;
 
     // Read points from 'rows' into 'pts'
@@ -188,7 +193,7 @@ class ChartElement extends HTMLElement {
     for (const r of rows) {
       const x = Number(r[xHeaderIndex]), y = Number(r[yHeaderIndex]);
       if (r[xHeaderIndex]?.trim() !== '' && r[yHeaderIndex]?.trim() !== '' && isFinite(x) && isFinite(y)) {
-         pts.push([x, y]);
+        pts.push([x, y]);
       }
     }
 
@@ -211,24 +216,19 @@ class ChartElement extends HTMLElement {
     if (ptsXMin === ptsXMax) { ptsXMin -= 1; ptsXMax += 1; }
     if (ptsYMin === ptsYMax) { ptsYMin -= 1; ptsYMax += 1; }
 
-    this.ptData = {pts:pts, xMin:ptsXMin, yMin:ptsYMin, xMax:ptsXMax, yMax:ptsYMax};
+    this.ptData = {pts:pts, xMin:ptsXMin, yMin:ptsYMin, xMax:ptsXMax, yMax:ptsYMax, xRange: ptsXMax - ptsXMin, yRange: ptsYMax - ptsYMin};
+  }
 
-    // TODO: Testing...
-    // size canvas for sharp rendering on retina screens
-    const dpr = window.devicePixelRatio || 1;
-    const W = cv.clientWidth, H = cv.clientHeight;
-    cv.width = W * dpr; 
-    cv.height = H * dpr;
-
-    // Apply zoom scaling and translation relative to data range.
-    const xRange = ptsXMax - ptsXMin;
-    const yRange = ptsYMax - ptsYMin;
-    const scaledXRange = xRange * this.zoomParameters.xScale;
-    const scaledYRange = yRange * this.zoomParameters.yScale;
+  /**
+   * Updates the zoomDimensions field of the chart, using cached zoomParameters and ptData
+   */
+  updateZoomDimensions() {
+    const scaledXRange = this.ptData.xRange * this.zoomParameters.xScale;
+    const scaledYRange = this.ptData.yRange * this.zoomParameters.yScale;
 
     // Calculate bounds for zoomed frame.
-    let frameXMin = ptsXMin + xRange * this.zoomParameters.xTranslate;
-    let frameYMin = ptsYMin + yRange * this.zoomParameters.yTranslate;
+    let frameXMin = ptsXMin + this.ptData.xRange * this.zoomParameters.xTranslate;
+    let frameYMin = ptsYMin + this.ptData.yRange * this.zoomParameters.yTranslate;
     let frameXMax = frameXMin + scaledXRange;
     let frameYMax = frameYMin + scaledYRange;
 
@@ -236,38 +236,71 @@ class ChartElement extends HTMLElement {
     const padX = scaledXRange * 0.04, padY = scaledYRange * 0.06;
     frameXMin -= padX; frameXMax += padX; frameYMin -= padY; frameYMax += padY;
 
+    this.zoomDimensions = {xMin: frameXMin, yMin: frameYMin, xMax: frameXMax, yMax: frameYMax, xRange: scaledXRange, yRange:scaledYRange};
+  }
+
+  updateUIDimensions() {
+    // Margin is any blank space outside of axis labels and grid lines
+
     // Calculate dynamic left margin based on Y-axis tick string width to prevent clipping
-    ctx.font = '12px system-ui, sans-serif';
-    const yTicks = niceTicks(frameYMin, frameYMax);
-    const fmtY = tickFormatter(frameYMin, frameYMax);
+    this.#context.font = '12px system-ui, sans-serif';
+    const yTicks = niceTicks(this.zoomDimensions.yMin, this.zoomDimensions.yMax);
+    const fmtY = tickFormatter(this.zoomDimensions.yMin, this.zoomDimensions.yMax);
     let maxYTextWidth = 30;
     for (const t of yTicks) {
-      const w = ctx.measureText(fmtY(t)).width;
+      const w = this.#context.measureText(fmtY(t)).width;
       if (w > maxYTextWidth) maxYTextWidth = w;
     }
 
-    // Added: Read the shared axis-label size and the separate title size.
-    const axisFontSize = this.readFontSize('axis-font-size', 18);
-    const titleFontSize = this.readFontSize('title-font-size', 24);
-
-    // Margin is any blank space outside of axis labels and grid lines
-    // Changed: Reserve additional space for larger axis labels and titles.
-    const leftMargin = Math.max(50, Math.ceil(maxYTextWidth + axisFontSize + 24));
+    const leftMargin = Math.max(50, Math.ceil(maxYTextWidth + this.uiParameters.axisFontSize + 24));
     const rightMargin = 24;
     // TODO: Adapt to title existence - shrink more?
-    const topMargin = Math.max(40, titleFontSize + 25);
-    const bottomMargin = Math.max(50, axisFontSize + 34);
+    const topMargin = Math.max(40, this.uiParameters.titleFontSize + 25);
+    const bottomMargin = Math.max(50, this.uiParameters.axisFontSize + 34);
 
     // Dimensions of the plot space in pixels
-    const plotWidth = W - leftMargin - rightMargin;
-    const plotHeight = H - topMargin - bottomMargin;
+    const plotWidth = this.#canvas.clientWidth - leftMargin - rightMargin;
+    const plotHeight = this.#canvas.clientHeight - topMargin - bottomMargin;
 
-    // Converts plot-space coordinates to ChartElement-relative screen positions.
-    const toElementX = x => leftMargin + (x - frameXMin) / (frameXMax - frameXMin) * plotWidth;       // data -> pixel
-    const toElementY = y => topMargin + plotHeight - (y - frameYMin) / (frameYMax - frameYMin) * plotHeight;
+    this.uiDimensions = { leftMargin: leftMargin, rightMargin: rightMargin, topMargin: topMargin, bottomMargin: bottomMargin, plotWidth: plotWidth, plotHeight: plotHeight};
+  }
 
-    // Cache plot geometry for hover tooltip and pan/zoom lookups
-    this.cachedPlot = { pts:pts, uiParams:{}, uiDims:{}};
+  /**
+   * Converts a x-coordinate from graph space to element-relative pixel space. Uses cached UI dimensions.
+   * @param {Number} graphX 
+   */
+  toElementX(graphX) {
+    return this.uiDimensions.leftMargin + (graphX - this.zoomDimensions.xMin) / (this.zoomDimensions.xMax - this.zoomDimensions.xMin) *  this.uiDimensions.plotWidth;
+  }
+
+  /**
+   * Converts a y-coordinate from graph space to element-relative pixel space.
+   * @param {Number} graphX 
+   */
+  toElementY(graphY) {
+    // TODO: Review
+    return this.uiDimensions.topMargin + this.uiDimensions.plotHeight - (graphY - this.zoomDimensions.yMin) / ( this.zoomDimensions.yMax -  this.zoomDimensions.yMin) * this.uiDimensions.plotHeight;
+  }
+
+  /**
+   * Draws the chart on the canvas based on the current data and selected options.
+   * @param {string[]} headers - The headers corresponding to the data columns.
+   * @param {number} xHeaderIndex - The index of the X-axis column.
+   * @param {number} yHeaderIndex - The index of the Y-axis column.
+   * @param {string} type - The type of chart ('line' or 'scatter').
+   * @param {function|null} [completionHandler=null] -
+   * Optional callback to be executed after the chart is drawn.
+   * @returns {void}
+   */
+  updateCache(rows, headers, xHeaderIndex, yHeaderIndex, type, completionHandler = null) {
+    const cv = this.#canvas;
+    const ctx = this.#context;
+
+    // Added: Read the shared axis-label size and the separate title size.
+    //const axisFontSize = this.readFontSize('axis-font-size', 18);
+    // const titleFontSize = this.readFontSize('title-font-size', 24);
+
+
       
      /* 
       sx: toElementX, sy: toElementY, xi, yi, type, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H,
@@ -275,8 +308,6 @@ class ChartElement extends HTMLElement {
       xAbs: Math.max(Math.abs(ptsXMin), Math.abs(ptsXMax)),
       yAbs: Math.max(Math.abs(ptsYMin), Math.abs(ptsYMax)) };*/
 
-    this.cachedPlot.uiDims = {};
-    this.cachedPlot.uiParams = {headers:headers, xHeaderIndex:xHeaderIndex, yHeaderIndex:yHeaderIndex};
   }
 
   /**
@@ -298,6 +329,12 @@ class ChartElement extends HTMLElement {
     const xLabel = $('xlabel').value.trim() || headers[xHeaderIndex];
     const yLabel = $('ylabel').value.trim() || headers[yHeaderIndex];
 
+        // TODO: Testing...
+    // size canvas for sharp rendering on retina screens
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; 
+    cv.height = H * dpr;
 
         // Why here?
     //if (!this.isDragging && !this.zoomCursorTimeout) cv.style.cursor = 'grab';
