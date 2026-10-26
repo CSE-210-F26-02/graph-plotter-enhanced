@@ -191,13 +191,13 @@ class ChartElement extends HTMLElement {
    * @param {string[][]} data - The data to be plotted, as row, col strings from a CSV file.
    */
   updatePointData(data){
-    if (!rows.length) return;
+    if (!data.length) return;
 
-    // Read points from 'rows' into 'pts'
+    // Read points from 'data' into 'pts'
     let pts = [];
-    for (const r of rows) {
-      const x = Number(r[xHeaderIndex]), y = Number(r[yHeaderIndex]);
-      if (r[xHeaderIndex]?.trim() !== '' && r[yHeaderIndex]?.trim() !== '' && isFinite(x) && isFinite(y)) {
+    for (const r of data) {
+      const x = Number(r[this.uiParameters.xHeaderIndex]), y = Number(r[this.uiParameters.yHeaderIndex]);
+      if (r[this.uiParameters.xHeaderIndex]?.trim() !== '' && r[this.uiParameters.yHeaderIndex]?.trim() !== '' && isFinite(x) && isFinite(y)) {
         pts.push([x, y]);
       }
     }
@@ -237,8 +237,8 @@ class ChartElement extends HTMLElement {
     const scaledYRange = this.#ptData.yRange * this.zoomParameters.yScale;
 
     // Calculate bounds for zoomed frame.
-    let frameXMin = ptsXMin + this.#ptData.xRange * this.zoomParameters.xTranslate;
-    let frameYMin = ptsYMin + this.#ptData.yRange * this.zoomParameters.yTranslate;
+    let frameXMin = this.#ptData.xMin + this.#ptData.xRange * this.zoomParameters.xTranslate;
+    let frameYMin = this.#ptData.yMin + this.#ptData.yRange * this.zoomParameters.yTranslate;
     let frameXMax = frameXMin + scaledXRange;
     let frameYMax = frameYMin + scaledYRange;
 
@@ -381,8 +381,8 @@ class ChartElement extends HTMLElement {
     ctx.textBaseline = 'middle';
 
     // TODO: Remove $, should not reference elements from ChartElement.
-    const xLabel = $('xlabel').value.trim() || headers[xHeaderIndex];
-    const yLabel = $('ylabel').value.trim() || headers[yHeaderIndex];
+    const xLabel = $('xlabel').value.trim() || this.uiParameters.headers[this.uiParameters.xHeaderIndex];
+    const yLabel = $('ylabel').value.trim() || this.uiParameters.headers[this.uiParameters.yHeaderIndex];
 
     const yTicks = niceTicks(this.#zoomDimensions.yMin, this.#zoomDimensions.yMax);
     const fmtY = tickFormatter(this.#zoomDimensions.yMin, this.#zoomDimensions.yMax);
@@ -444,7 +444,7 @@ class ChartElement extends HTMLElement {
       const r = this.#ptData.pts > 5000 ? 2 : 4;
       for (const [x, y] of this.#ptData.pts) {
         // TODO: Move check somewhere else, knowing which points are in bounds is helpful elsewhere as well
-        if (x >= this.zoomParameters.xMin && x <= this.zoomParameters.xMax && y >= this.zoomParameters.yMin && y <= this.zoomParameters.yMax) {
+        if (x >= this.#zoomDimensions.xMin && x <= this.#zoomDimensions.xMax && y >= this.#zoomDimensions.yMin && y <= this.#zoomDimensions.yMax) {
           ctx.beginPath(); 
           ctx.arc(this.toElementX(x), this.toElementY(y), r, 0, Math.PI * 2);
           ctx.fill();
@@ -554,10 +554,10 @@ class ChartElement extends HTMLElement {
       // TODO: Double check comments are okay
       if (this.#uiDimensions.plotWidth > 0) {
 
-        this.zoomParameters.xTranslate -= (dx / this.#uiDimensions.plotWidth); // * this.zoomParameters.xScale * 1.08;
+        this.zoomParameters.xTranslate -= (dx / this.#uiDimensions.plotWidth) * this.zoomParameters.xScale; // * 1.08;
       }
       if (this.#uiDimensions.plotHeight > 0) {
-        this.zoomParameters.yTranslate += (dy / this.#uiDimensions.plotHeight); // * this.zoomParameters.yScale * 1.12;
+        this.zoomParameters.yTranslate += (dy / this.#uiDimensions.plotHeight) * this.zoomParameters.yScale;// * 1.12;
       }
 
       this.updateZoomDimensions();

@@ -30,6 +30,8 @@ const adjustSaveButtonSize = () => {
   }
 };
 
+let rows = [], fileName = '';
+/*
 const drawGraph = () => chart.draw(
   rows,
   headers,
@@ -40,9 +42,7 @@ const drawGraph = () => chart.draw(
     $('status').textContent =
       `${fileName}: ${rows.length} rows, ${chart.getNumberOfPointsPlotted()} points plotted.`;
   }
-);
-
-let headers = [], rows = [], fileName = '';
+);*/
 
 // Added: Reject non-CSV files and display an error on the chart.
 function validateCSVFile(file) {
@@ -64,28 +64,28 @@ function validateCSVFile(file) {
  */
 function load(text, name) {
   try {
-  $('err').textContent = '';
-  const all = parseCSV(text);
+    $('err').textContent = '';
+    const all = parseCSV(text);
 
-  if (all.length < 2) {
-    throw new NoDataFoundError('No data rows found.');
-  }
-  headers = all[0].map((h, i) => sanitizeInput(h).trim() || 'col' + (i + 1));
-  rows = all.slice(1);
-  fileName = name;
+    if (all.length < 2) {
+      throw new NoDataFoundError('No data rows found.');
+    }
+    chart.uiParameters.headers = all[0].map((h, i) => sanitizeInput(h).trim() || 'col' + (i + 1));
+    rows = all.slice(1);
+    fileName = name;
 
-  // keep only columns where most values are numbers
-  const numeric = headers.map((_, j) => j).filter(j => {
-    const sample = rows.slice(0, 500).filter(r => r[j] && r[j].trim() !== '');
-    return sample.length > 0 &&
-      sample.filter(r => !isNaN(Number(r[j]))).length / sample.length >= 0.8;
-  });
+    // keep only columns where most values are numbers
+    const numeric = chart.uiParameters.headers.map((_, j) => j).filter(j => {
+      const sample = rows.slice(0, 500).filter(r => r[j] && r[j].trim() !== '');
+      return sample.length > 0 &&
+        sample.filter(r => !isNaN(Number(r[j]))).length / sample.length >= 0.8;
+    });
 
     if (numeric.length < 2) {
       throw new NotEnoughColumnsError('Need at least two numeric columns.');
     }
 
-    const options = numeric.map(j => new Option(headers[j], j));
+    const options = numeric.map(j => new Option(chart.uiParameters.headers[j], j));
     $('xs').innerHTML = '';
     $('ys').innerHTML = '';
     options.forEach(option => {
@@ -96,7 +96,8 @@ function load(text, name) {
     $('ys').value = numeric[1];
     // New data: drop the previous zoom/pan so the whole dataset is visible
     chart.resetView();
-    drawGraph();
+    chart.updatePointData(rows);
+    chart.draw();
     adjustSaveButtonSize();
   } catch (err) {
     if (err instanceof InvalidFileError || err instanceof NoDataFoundError || err instanceof NotEnoughColumnsError) {
@@ -104,11 +105,11 @@ function load(text, name) {
       $('err').textContent = err.message;
     } else {
       chart.clearChart('Unknown error occurred.');
-      $('err').textContent = err.message;
+      throw err;
     }
 
     // Reset headers, rows, and file name
-    headers = [];
+    chart.uiParameters.headers = [];
     rows = [];
     fileName = '';
 
@@ -159,16 +160,21 @@ $('sample').onclick = () => {
 ['xs', 'ys', 'type'].forEach(id => ($(id).onchange = () => {
   // Different columns have a different range, so start from the full view
   if (id !== 'type') chart.resetView();
-  drawGraph();
+  if (id == 'xs') chart.uiParameters.xHeaderIndex = this.value;
+  if (id == 'ys') chart.uiParameters.yHeaderIndex = this.value;
+  chart.updateUIDimensions();
+  chart.draw();
   adjustSaveButtonSize();
 }));
 $('title').oninput = () => {
   showWhichSaveButton();
-  drawGraph();
+  chart.updateUIDimensions();
+  chart.draw();
   adjustSaveButtonSize();
 };
 window.addEventListener('resize', () => {
-  drawGraph();
+  chart.updateUIDimensions();
+  chart.draw();
   adjustSaveButtonSize();
 });
 
@@ -246,7 +252,8 @@ $('generate').onclick = () => {
     return;
   }
 
-  drawGraph();
+  chart.updateZoomDimensions();
+  chart.draw();
   adjustSaveButtonSize();
 };
 
