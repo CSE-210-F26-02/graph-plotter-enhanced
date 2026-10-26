@@ -23,7 +23,7 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
  * @property {number} H - Width of the canvas element depicting the chart, in pixels.
  */
 
-/** NEW
+/**
  * @typedef {Object} ChartPointData - Represents data based solely on the chart's assigned points.
  * @property {Array<Array<number>>} pts - All points represented by the chart.
  * @property {number} xMin - Minimum x coordinate within the point set.
@@ -34,7 +34,7 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
  * @property {number} yRange - Range of y coordinates in the point set.
  */
 
-/** NEW
+/**
  * @typedef {Object} ChartUIParameters - User controlled settings for how the chart is displayed
  * @property {string} type - Type of chart to be depicted. Can be either 'scatter' or 'line'.
  * @property {Array<string>} headers - List of headers availible for charting, read from input. Note both x and y use the same pool.
@@ -44,7 +44,7 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
  * @property {number} titleFontSize - Font size for title labels.
  */
 
-/** NEW
+/**
  * @typedef {Object} ChartUIDimensions - Dimensions used for UI scaling/alignment throughout the code, driven by chart's UI parameters.
  * @property {number} leftMargin - Left margin extent of the plot relative to the canvas element, in pixels. Functions as base x-offset for graph region.
  * @property {number} rightMargin - Right margin extent of the plot relative to the canvas element, in pixels.
@@ -86,31 +86,35 @@ const clamp = (val, min, max) => Math.min(Math.max(val, min), max);
  * Custom chart element that encapsulates the chart drawing logic and user interactions.
  */
 class ChartElement extends HTMLElement {
-  // Formerly cv
+  // Html components within chart element.
   #canvas;
   #context;
   #tooltip;
 
   /** @type {ChartPointData} */
-  ptData;
+  #ptData;
   
   /** @type {ChartUIParameters} */
-  uiParameters;
+  uiParameters = {type:'point', headers: ['x', 'y'], xHeaderIndex:0, yHeaderIndex:1, axisFontSize:12, titleFontSize:24};
 
   /** @type {ChartUIDimensions} */
-  uiDimensions;
+  #uiDimensions;
 
   /** @type {ZoomParameters} */
   zoomParameters = {xScale: 1.0, yScale: 1.0, xTranslate: 0.0, yTranslate: 0.0}
 
   /** @type {ZoomDimensions} */
-  zoomDimensions;
+  #zoomDimensions;
 
   // Drag and cursor state
   isDragging = false;
   dragStartX = 0
   dragStartY = 0;
   zoomCursorTimeout = null;
+  /* Variable to track the distance between two touch points for touch operations */
+  // Know how far apart the screen moved to get a zoom factor for pinch-zooming; null when not pinching
+  lastTouchDistance = null;
+  tapPoint = null;
 
   constructor(){
     super();
@@ -166,9 +170,10 @@ class ChartElement extends HTMLElement {
       ctx.textBaseline = 'middle';
       ctx.fillText(msg, W / 2, H / 2);
     }
-    // Clear both the cache and headers
-    this.cachedPlot = null;
-    this.graphHeaders = [];
+
+    this.#ptData = null;
+    this.#uiDimensions = null;
+    this.#zoomDimensions = null;
   }
 
   /**
@@ -182,7 +187,7 @@ class ChartElement extends HTMLElement {
     this.#tooltip.style.display = 'none';
   }
 
-  /** Updates the ptData structure of the chart.
+  /** Updates the ptData structure of the chart. Automatically calls updateZoomDimensions (and, by extension, updateUIDimensions), since all dimension data needs to be recalculated.
    * @param {string[][]} data - The data to be plotted, as row, col strings from a CSV file.
    */
   updatePointData(data){
@@ -216,19 +221,24 @@ class ChartElement extends HTMLElement {
     if (ptsXMin === ptsXMax) { ptsXMin -= 1; ptsXMax += 1; }
     if (ptsYMin === ptsYMax) { ptsYMin -= 1; ptsYMax += 1; }
 
-    this.ptData = {pts:pts, xMin:ptsXMin, yMin:ptsYMin, xMax:ptsXMax, yMax:ptsYMax, xRange: ptsXMax - ptsXMin, yRange: ptsYMax - ptsYMin};
+    this.#ptData = {pts:pts, xMin:ptsXMin, yMin:ptsYMin, xMax:ptsXMax, yMax:ptsYMax, xRange: ptsXMax - ptsXMin, yRange: ptsYMax - ptsYMin};
+    this.updateZoomDimensions();
   }
 
   /**
-   * Updates the zoomDimensions field of the chart, using cached zoomParameters and ptData
+   * Updates the zoomDimensions field of the chart, using cached zoomParameters and ptData. Automatically updates UI dimensions, since the data will be dirty after adjusting zoom.
    */
   updateZoomDimensions() {
-    const scaledXRange = this.ptData.xRange * this.zoomParameters.xScale;
-    const scaledYRange = this.ptData.yRange * this.zoomParameters.yScale;
+    if (!this.#ptData) {
+        throw new Error("Cannot update chart zoom dimensions without point data!");
+    }
+
+    const scaledXRange = this.#ptData.xRange * this.zoomParameters.xScale;
+    const scaledYRange = this.#ptData.yRange * this.zoomParameters.yScale;
 
     // Calculate bounds for zoomed frame.
-    let frameXMin = ptsXMin + this.ptData.xRange * this.zoomParameters.xTranslate;
-    let frameYMin = ptsYMin + this.ptData.yRange * this.zoomParameters.yTranslate;
+    let frameXMin = ptsXMin + this.#ptData.xRange * this.zoomParameters.xTranslate;
+    let frameYMin = ptsYMin + this.#ptData.yRange * this.zoomParameters.yTranslate;
     let frameXMax = frameXMin + scaledXRange;
     let frameYMax = frameYMin + scaledYRange;
 
@@ -236,16 +246,24 @@ class ChartElement extends HTMLElement {
     const padX = scaledXRange * 0.04, padY = scaledYRange * 0.06;
     frameXMin -= padX; frameXMax += padX; frameYMin -= padY; frameYMax += padY;
 
-    this.zoomDimensions = {xMin: frameXMin, yMin: frameYMin, xMax: frameXMax, yMax: frameYMax, xRange: scaledXRange, yRange:scaledYRange};
+    this.#zoomDimensions = {xMin: frameXMin, yMin: frameYMin, xMax: frameXMax, yMax: frameYMax, xRange: scaledXRange, yRange:scaledYRange};
+    this.updateUIDimensions();
   }
 
+  /**
+   * Updates uiDimensions field of the chart, using cached zoomDimensions.
+   */
   updateUIDimensions() {
+    if (!this.#zoomDimensions) {
+        throw new Error("Cannot update chart ui dimensions without zoom information!");
+    }
+
     // Margin is any blank space outside of axis labels and grid lines
 
     // Calculate dynamic left margin based on Y-axis tick string width to prevent clipping
     this.#context.font = '12px system-ui, sans-serif';
-    const yTicks = niceTicks(this.zoomDimensions.yMin, this.zoomDimensions.yMax);
-    const fmtY = tickFormatter(this.zoomDimensions.yMin, this.zoomDimensions.yMax);
+    const yTicks = niceTicks(this.#zoomDimensions.yMin, this.#zoomDimensions.yMax);
+    const fmtY = tickFormatter(this.#zoomDimensions.yMin, this.#zoomDimensions.yMax);
     let maxYTextWidth = 30;
     for (const t of yTicks) {
       const w = this.#context.measureText(fmtY(t)).width;
@@ -262,7 +280,7 @@ class ChartElement extends HTMLElement {
     const plotWidth = this.#canvas.clientWidth - leftMargin - rightMargin;
     const plotHeight = this.#canvas.clientHeight - topMargin - bottomMargin;
 
-    this.uiDimensions = { leftMargin: leftMargin, rightMargin: rightMargin, topMargin: topMargin, bottomMargin: bottomMargin, plotWidth: plotWidth, plotHeight: plotHeight};
+    this.#uiDimensions = { leftMargin: leftMargin, rightMargin: rightMargin, topMargin: topMargin, bottomMargin: bottomMargin, plotWidth: plotWidth, plotHeight: plotHeight};
   }
 
   /**
@@ -270,7 +288,7 @@ class ChartElement extends HTMLElement {
    * @param {Number} graphX 
    */
   toElementX(graphX) {
-    return this.uiDimensions.leftMargin + (graphX - this.zoomDimensions.xMin) / (this.zoomDimensions.xMax - this.zoomDimensions.xMin) *  this.uiDimensions.plotWidth;
+    return this.#uiDimensions.leftMargin + (graphX - this.#zoomDimensions.xMin) / (this.#zoomDimensions.xMax - this.#zoomDimensions.xMin) *  this.#uiDimensions.plotWidth;
   }
 
   /**
@@ -279,7 +297,7 @@ class ChartElement extends HTMLElement {
    */
   toElementY(graphY) {
     // TODO: Review
-    return this.uiDimensions.topMargin + this.uiDimensions.plotHeight - (graphY - this.zoomDimensions.yMin) / ( this.zoomDimensions.yMax -  this.zoomDimensions.yMin) * this.uiDimensions.plotHeight;
+    return this.#uiDimensions.topMargin + this.#uiDimensions.plotHeight - (graphY - this.#zoomDimensions.yMin) / ( this.#zoomDimensions.yMax -  this.#zoomDimensions.yMin) * this.#uiDimensions.plotHeight;
   }
 
   /**
@@ -292,23 +310,11 @@ class ChartElement extends HTMLElement {
    * Optional callback to be executed after the chart is drawn.
    * @returns {void}
    */
-  updateCache(rows, headers, xHeaderIndex, yHeaderIndex, type, completionHandler = null) {
-    const cv = this.#canvas;
-    const ctx = this.#context;
-
     // Added: Read the shared axis-label size and the separate title size.
     //const axisFontSize = this.readFontSize('axis-font-size', 18);
     // const titleFontSize = this.readFontSize('title-font-size', 24);
 
 
-      
-     /* 
-      sx: toElementX, sy: toElementY, xi, yi, type, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H,
-      xRange, yRange,
-      xAbs: Math.max(Math.abs(ptsXMin), Math.abs(ptsXMax)),
-      yAbs: Math.max(Math.abs(ptsYMin), Math.abs(ptsYMax)) };*/
-
-  }
 
   /**
    * Draws the chart on the canvas based on the current data and selected options.
@@ -325,21 +331,21 @@ class ChartElement extends HTMLElement {
    * @returns {void}
    */
   draw(completionHandler = null) {
-          // Added: Use custom axis names when provided; otherwise use column names.
-    const xLabel = $('xlabel').value.trim() || headers[xHeaderIndex];
-    const yLabel = $('ylabel').value.trim() || headers[yHeaderIndex];
+    const cv = this.#canvas;
+    const ctx = this.#context;
+    // Added: Use custom axis names when provided; otherwise use column names.
 
-        // TODO: Testing...
+
+    // TODO: Testing...
     // size canvas for sharp rendering on retina screens
     const dpr = window.devicePixelRatio || 1;
     const W = cv.clientWidth, H = cv.clientHeight;
     cv.width = W * dpr; 
     cv.height = H * dpr;
 
-        // Why here?
-    //if (!this.isDragging && !this.zoomCursorTimeout) cv.style.cursor = 'grab';
+    if (!this.isDragging && !this.zoomCursorTimeout) cv.style.cursor = 'grab';
 
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
 
         // -- Draw --
@@ -354,64 +360,74 @@ class ChartElement extends HTMLElement {
     // Use fewer X ticks when labels get long (e.g. 1.0000005e9) so they never overlap
     let xCount = 12, xTicks, fmtX;
     for (; xCount >= 2; xCount--) {
-      xTicks = niceTicks(xMin, xMax, xCount);
-      fmtX = tickFormatter(xMin, xMax, xCount);
+      xTicks = niceTicks(this.#zoomDimensions.xMin, this.#zoomDimensions.xMax, xCount);
+      fmtX = tickFormatter(this.#zoomDimensions.xMin, this.#zoomDimensions.xMax, xCount);
       let widest = 0;
       for (const t of xTicks) widest = Math.max(widest, ctx.measureText(fmtX(t)).width);
-      if ((widest + 16) * xTicks.length <= plotWidth) break;
+      if ((widest + 16) * xTicks.length <= this.#uiDimensions.plotWidth) break;
     }
 
     for (const tickX of xTicks) {
-      const sx = toElementX(tickX);
-      if (sx < leftMargin || sx > leftMargin + plotWidth) continue;
+      const sx = this.toElementX(tickX);
+      if (sx < this.#uiDimensions.leftMargin || sx > this.#uiDimensions.leftMargin + this.#uiDimensions.plotWidth) continue;
       ctx.beginPath(); 
-      ctx.moveTo(sx, topMargin);
-      ctx.lineTo(sx, topMargin + plotHeight);
+      ctx.moveTo(sx, this.#uiDimensions.topMargin);
+      ctx.lineTo(sx, this.#uiDimensions.topMargin + this.#uiDimensions.plotHeight);
       ctx.stroke();
-      ctx.fillText(fmtX(tickX), sx, topMargin + plotHeight + 6);
+      ctx.fillText(fmtX(tickX), sx, this.#uiDimensions.topMargin + this.#uiDimensions.plotHeight + 6);
     }
 
     ctx.textAlign = 'right'; 
     ctx.textBaseline = 'middle';
 
+    // TODO: Remove $, should not reference elements from ChartElement.
+    const xLabel = $('xlabel').value.trim() || headers[xHeaderIndex];
+    const yLabel = $('ylabel').value.trim() || headers[yHeaderIndex];
+
+    const yTicks = niceTicks(this.#zoomDimensions.yMin, this.#zoomDimensions.yMax);
+    const fmtY = tickFormatter(this.#zoomDimensions.yMin, this.#zoomDimensions.yMax);
+
     for (const tickY of yTicks) {
-      const sy = toElementY(tickY);
-      if (sy < topMargin || sy > topMargin + plotHeight) continue;
+      const sy = this.toElementY(tickY);
+      if (sy < this.#uiDimensions.topMargin || sy > this.#uiDimensions.topMargin + this.#uiDimensions.plotHeight) continue;
       ctx.beginPath(); 
-      ctx.moveTo(leftMargin, sy);
-      ctx.lineTo(leftMargin + plotWidth, sy);
+      ctx.moveTo(this.#uiDimensions.leftMargin, sy);
+      ctx.lineTo(this.#uiDimensions.leftMargin + this.#uiDimensions.plotWidth, sy);
       ctx.stroke();
-      ctx.fillText(fmtY(tickY), leftMargin - 8, sy);
+      ctx.fillText(fmtY(tickY), this.#uiDimensions.leftMargin - 8, sy);
     }
+
+    const xLabelCenter = this.#uiDimensions.leftMargin + this.#uiDimensions.plotWidth / 2;
 
     // Changed: Draw custom axis labels with the selected font size.
     ctx.fillStyle = TEXT;
-    ctx.font = `${axisFontSize}px system-ui, sans-serif`;
+    ctx.font = `${this.uiParameters.axisFontSize}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.fillText(xLabel, leftMargin + plotWidth / 2, H - 10);
+    ctx.fillText(xLabel, xLabelCenter, H - 10);
 
     ctx.save();
-    ctx.translate(axisFontSize / 2 + 8, topMargin + plotHeight / 2);
+    ctx.translate(this.uiParameters.axisFontSize / 2 + 8, this.#uiDimensions.topMargin + this.#uiDimensions.plotHeight / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.textBaseline = 'middle';
     ctx.fillText(yLabel, 0, 0);
     ctx.restore();
 
     // Changed: Draw the title with its selected font size and matching spacing.
+    // TODO: Remove $
     if ($('title').value) {
-      ctx.font = `bold ${titleFontSize}px system-ui, sans-serif`;
+      ctx.font = `bold ${this.uiParameters.titleFontSize}px system-ui, sans-serif`;
       ctx.textBaseline = 'top';
       // Add some top padding for the title to avoid overlapping with the chart area.
       const titlePadding = 10;
 
-      ctx.fillText($('title').value, leftMargin + plotWidth / 2, titlePadding);
+      ctx.fillText($('title').value, xLabelCenter, titlePadding);
     }
 
     // data (clipped to the plot area so panned/zoomed data doesn't draw over margins)
     ctx.save();
     ctx.beginPath();
-    ctx.rect(leftMargin, topMargin, plotWidth, plotHeight);
+    ctx.rect(this.#uiDimensions.leftMargin, this.#uiDimensions.topMargin, this.#uiDimensions.plotWidth, this.#uiDimensions.plotHeight);
     ctx.clip();
 
     ctx.fillStyle = COLOR; 
@@ -419,18 +435,18 @@ class ChartElement extends HTMLElement {
     if (type === 'line') {
       ctx.lineWidth = 2; 
       ctx.beginPath();
-      pts.forEach(([x, y], i) => (
-        i ? ctx.lineTo(toElementX(x), toElementY(y)) : ctx.moveTo(toElementX(x), toElementY(y))
+      this.#ptData.pts.forEach(([x, y], i) => (
+        i ? ctx.lineTo(this.toElementX(x), this.toElementY(y)) : ctx.moveTo(this.toElementX(x), this.toElementY(y))
       ));
       ctx.stroke();
     } else {
-      ctx.globalAlpha = pts.length > 1000 ? 0.45 : 0.75;
-      const r = pts.length > 5000 ? 2 : 4;
-      for (const [x, y] of pts) {
+      ctx.globalAlpha = this.#ptData.pts > 1000 ? 0.45 : 0.75;
+      const r = this.#ptData.pts > 5000 ? 2 : 4;
+      for (const [x, y] of this.#ptData.pts) {
         // TODO: Move check somewhere else, knowing which points are in bounds is helpful elsewhere as well
-        if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
+        if (x >= this.zoomParameters.xMin && x <= this.zoomParameters.xMax && y >= this.zoomParameters.yMin && y <= this.zoomParameters.yMax) {
           ctx.beginPath(); 
-          ctx.arc(toElementX(x), toElementY(y), r, 0, Math.PI * 2);
+          ctx.arc(this.toElementX(x), this.toElementY(y), r, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -455,7 +471,7 @@ class ChartElement extends HTMLElement {
   }
 
   getNumberOfPointsPlotted() {
-    return this.cachedPlot ? this.cachedPlot.pts.length : 0;
+    return this.#ptData ? this.#ptData.pts.length : 0;
   }
 
   /**
@@ -466,7 +482,7 @@ class ChartElement extends HTMLElement {
   stopDragging() {
     if (!this.isDragging) return;
     this.isDragging = false;
-    this.#canvas.style.cursor = this.cachedPlot?.pts.length ? 'grab' : 'default';
+    this.#canvas.style.cursor = this.#ptData?.pts.length ? 'grab' : 'default';
   }
 
   /**
@@ -476,9 +492,9 @@ class ChartElement extends HTMLElement {
    * @returns {boolean} True if the point is within the plot boundaries, false otherwise.
    */
   isInsidePlot(x, y) {
-    if (!this.cachedPlot) return false;
-    if (x >= this.cachedPlot.L && x <= (this.cachedPlot.L + this.cachedPlot.pw) &&
-        y >= this.cachedPlot.T && y <= (this.cachedPlot.T + this.cachedPlot.ph)) {
+    if (!this.#ptData) return false;
+    if (x >= this.#uiDimensions.leftMargin && x <= (this.#uiDimensions.leftMargin + this.#uiDimensions.plotWidth) &&
+        y >= this.#uiDimensions.topMargin && y <= (this.#uiDimensions.topMargin + this.#uiDimensions.plotHeight)) {
       return true;
     } else {
       return false;
@@ -490,7 +506,7 @@ class ChartElement extends HTMLElement {
    * @param {MouseEvent} e - The mouse event object.
    */
   onMouseDown(e) {
-    if (!this.cachedPlot || !this.cachedPlot.pts.length) return;
+    if (!this.#ptData || !this.#ptData.pts.length) return;
     const rect = this.#canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
@@ -512,7 +528,7 @@ class ChartElement extends HTMLElement {
   * @returns {void}
   */
   onMouseMove(e) {
-    if (!this.cachedPlot || !this.cachedPlot.pts.length || !this.cachedPlot.sx) {
+    if (!this.#ptData || !this.#ptData.pts.length || !this.#uiDimensions) {
       this.#tooltip.style.display = 'none';
       return;
     }
@@ -534,16 +550,18 @@ class ChartElement extends HTMLElement {
       const dy = e.clientY - this.dragStartY;
       this.dragStartX = e.clientX;
       this.dragStartY = e.clientY;
+      
+      // TODO: Double check comments are okay
+      if (this.#uiDimensions.plotWidth > 0) {
 
-      // 1.08 and 1.12 account for the 4% X padding and 6% Y padding on each side
-      if (this.cachedPlot.pw > 0) {
-        this.zoomParameters.xTranslate -= (dx / this.cachedPlot.pw) * this.zoomParameters.xScale * 1.08;
+        this.zoomParameters.xTranslate -= (dx / this.#uiDimensions.plotWidth); // * this.zoomParameters.xScale * 1.08;
       }
-      if (this.cachedPlot.ph > 0) {
-        this.zoomParameters.yTranslate += (dy / this.cachedPlot.ph) * this.zoomParameters.yScale * 1.12;
+      if (this.#uiDimensions.plotHeight > 0) {
+        this.zoomParameters.yTranslate += (dy / this.#uiDimensions.plotHeight); // * this.zoomParameters.yScale * 1.12;
       }
 
-      this.draw(this.graphRows, this.graphHeaders, this.cachedPlot.xi, this.cachedPlot.yi, this.cachedPlot.type);
+      this.updateZoomDimensions();
+      this.draw();
       return;
     }
 
@@ -554,9 +572,9 @@ class ChartElement extends HTMLElement {
     // Search for the closest point within 10px radius
     let closest = null, minD2 = 100;
     if (insidePlot) {
-      for (let i = 0; i < this.cachedPlot.pts.length; i++) {
-        const p = this.cachedPlot.pts[i];
-        const px = this.cachedPlot.sx(p[0]), py = this.cachedPlot.sy(p[1]);
+      for (let i = 0; i < this.#ptData.pts.length; i++) {
+        const p = this.#ptData.pts[i];
+        const px = this.toElementX(p[0]), py = this.toElementY(p[1]);
         const d2 = (mouseX - px) ** 2 + (mouseY - py) ** 2;
         if (d2 < minD2) {
           minD2 = d2;
@@ -570,7 +588,7 @@ class ChartElement extends HTMLElement {
       this.#tooltip.style.left = `${closest.px}px`;
       this.#tooltip.style.top = `${closest.py}px`;
       this.#tooltip.textContent = 
-        `${this.graphHeaders[this.cachedPlot.xi]}: ${fmt(closest.x)}, ${this.graphHeaders[this.cachedPlot.yi]}: ${fmt(closest.y)}`;
+        `${this.uiParameters.headers[this.uiParameters.xHeaderIndex]}: ${fmt(closest.x)}, ${this.uiParameters.headers[this.uiParameters.yHeaderIndex]}: ${fmt(closest.y)}`;
     } else {
       this.#tooltip.style.display = 'none';
     }
@@ -580,7 +598,7 @@ class ChartElement extends HTMLElement {
    * Handles scroll-wheel zooming centered on the cursor position.
    */
   onScrollWheel(e) {
-    if (!this.cachedPlot || !this.cachedPlot.pts.length || !this.cachedPlot.pw || !this.cachedPlot.ph) return;
+    if (!this.#ptData || !this.#uiDimensions) return;
     e.preventDefault();
     this.#tooltip.style.display = 'none';
 
@@ -598,8 +616,8 @@ class ChartElement extends HTMLElement {
     }, 250);
 
     // Normalized cursor position within the plot area (0 to 1)
-    const uX = clamp((mouseX - this.cachedPlot.L) / this.cachedPlot.pw, 0, 1);
-    const uY = clamp(1 - (mouseY - this.cachedPlot.T) / this.cachedPlot.ph, 0, 1);
+    const uX = clamp((mouseX - this.#uiDimensions.leftMargin) / this.#uiDimensions.plotWidth, 0, 1);
+    const uY = clamp(1 - (mouseY - this.#uiDimensions.topMargin) / this.#uiDimensions.plotHeight, 0, 1);
 
     const zoomFactor = zoomingIn ? 0.9 : 1.1;
     const oldXScale = this.zoomParameters.xScale;
@@ -611,9 +629,10 @@ class ChartElement extends HTMLElement {
     // Stop zooming in once the view would be narrower than floating point can resolve
     // (e.g. IDs near 1e17), otherwise tick labels collapse. Never forces a zoom out.
     if (zoomingIn) {
-      const { xRange, yRange, xAbs, yAbs } = this.cachedPlot;
-      newXScale = Math.max(newXScale, Math.min(oldXScale, xAbs * MIN_RELATIVE_RANGE / xRange));
-      newYScale = Math.max(newYScale, Math.min(oldYScale, yAbs * MIN_RELATIVE_RANGE / yRange));
+      const xAbs = Math.max(Math.abs(this.#ptData.xMin), Math.abs(this.#ptData.xMax));
+      const yAbs = Math.max(Math.abs(this.#ptData.yMin), Math.abs(this.#ptData.yMax));
+      newXScale = Math.max(newXScale, Math.min(oldXScale, xAbs * MIN_RELATIVE_RANGE / this.#ptData.xRange));
+      newYScale = Math.max(newYScale, Math.min(oldYScale, yAbs * MIN_RELATIVE_RANGE / this.#ptData.yRange));
     }
 
     // Adjust translation (including padding) so the point under the cursor stays stationary
@@ -623,13 +642,9 @@ class ChartElement extends HTMLElement {
     this.zoomParameters.xScale = newXScale;
     this.zoomParameters.yScale = newYScale;
 
-    this.draw(this.graphRows, this.graphHeaders, this.cachedPlot.xi, this.cachedPlot.yi, this.cachedPlot.type);
+    this.updateZoomDimensions();
+    this.draw();
   }
-
-  /* Variable to track the distance between two touch points for touch operations */
-  // Know how far apart the screen moved to get a zoom factor for pinch-zooming; null when not pinching
-  lastTouchDistance = null;
-  tapPoint = null;
 
   /**
    * Calculates the distance between two touch points.
@@ -647,7 +662,7 @@ class ChartElement extends HTMLElement {
    * @param {TouchEvent} e - The touch event object.
    */
   onTouchStart(e) {
-    if (!this.cachedPlot || !this.cachedPlot.pts.length || !this.cachedPlot.pw || !this.cachedPlot.ph) return;
+    if (!this.#ptData || !this.#uiDimensions) return;
     if (e.touches.length === 1) {
       /* Tap or drag gesture detected; initiate dragging if the touch is within the plot area. */
       this.onMouseDown(e.touches[0]);
@@ -670,7 +685,7 @@ class ChartElement extends HTMLElement {
    * @param {TouchEvent} e - The touch event object.
    */
   onTouchMove(e) {
-    if (!this.cachedPlot || !this.cachedPlot.pts.length || !this.cachedPlot.pw || !this.cachedPlot.ph) return;
+    if (!this.#ptData || !this.#uiDimensions) return;
 
     if (e.touches.length === 1 && this.isDragging) {
       e.preventDefault();
@@ -698,17 +713,20 @@ class ChartElement extends HTMLElement {
       let newYScale = clamp(oldYScale * factor, MIN_ZOOM_SCALE, MAX_ZOOM_SCALE);
 
       // Stop zooming in once the view would be narrower than floating point can resolve
+      // Note: might want to swap to zoom dimensions since those seem to be more appropriate?
       if (zoomingIn) {
-        const { xRange, yRange, xAbs, yAbs } = this.cachedPlot;
-        newXScale = Math.max(newXScale, Math.min(oldXScale, xAbs * MIN_RELATIVE_RANGE / xRange));
-        newYScale = Math.max(newYScale, Math.min(oldYScale, yAbs * MIN_RELATIVE_RANGE / yRange));
+        const xAbs = Math.max(Math.abs(this.#ptData.xMin), Math.abs(this.#ptData.xMax));
+        const yAbs = Math.max(Math.abs(this.#ptData.yMin), Math.abs(this.#ptData.yMax));
+        newXScale = Math.max(newXScale, Math.min(oldXScale, xAbs * MIN_RELATIVE_RANGE / this.#ptData.xRange));
+        newYScale = Math.max(newYScale, Math.min(oldYScale, yAbs * MIN_RELATIVE_RANGE / this.#ptData.yRange));
       }
 
+      
       this.zoomParameters.xScale = newXScale;
       this.zoomParameters.yScale = newYScale;
 
-      this.draw(this.graphRows, this.graphHeaders, this.cachedPlot.xi, this.cachedPlot.yi, this.cachedPlot.type);
-
+      this.updateZoomDimensions();
+      this.draw();
       this.lastTouchDistance = currentDistance;
     }
   }
