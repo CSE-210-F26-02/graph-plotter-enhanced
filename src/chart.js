@@ -37,6 +37,7 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
 /**
  * @typedef {Object} ChartUIParameters - User controlled settings for how the chart is displayed
  * @property {string} type - Type of chart to be depicted. Can be either 'scatter' or 'line'.
+ * @property {string} title - Title of the overall graph.
  * @property {Array<string>} headers - List of headers availible for charting, read from input. Note both x and y use the same pool.
  * @property {number} xHeaderIndex - Index of the x-axis header (formerly xi)
  * @property {number} yHeaderIndex - Index of the y-axis header (formerly yi)
@@ -75,7 +76,7 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
 const $ = id => document.getElementById(id);
 const COLOR = '#2563eb', GRID = '#e8ebf0', TEXT = '#1c2330', MUTED = '#6b7585';
 
-const MIN_ZOOM_SCALE = 0.00002, MAX_ZOOM_SCALE = 10;
+const MIN_ZOOM_SCALE = 0.00002, MAX_ZOOM_SCALE = 1.5;
 // Smallest visible range relative to the data's magnitude; below this, doubles can't tell ticks apart
 const MIN_RELATIVE_RANGE = 1e-12;
 // How far (px) a finger can wander and still count as a tap rather than a drag
@@ -95,7 +96,7 @@ class ChartElement extends HTMLElement {
   #ptData;
   
   /** @type {ChartUIParameters} */
-  uiParameters = {type:'point', headers: ['x', 'y'], xHeaderIndex:0, yHeaderIndex:1, axisFontSize:12, titleFontSize:24};
+  uiParameters = {type:'point', title: '', headers: ['x', 'y'], xHeaderIndex:0, yHeaderIndex:1, axisFontSize:12, titleFontSize:24};
 
   /** @type {ChartUIDimensions} */
   #uiDimensions;
@@ -196,9 +197,8 @@ class ChartElement extends HTMLElement {
     // Read points from 'data' into 'pts'
     let pts = [];
     for (const r of data) {
-      const x = Number(r[this.uiParameters.xHeaderIndex]), y = Number(r[this.uiParameters.yHeaderIndex]);
-      if (r[this.uiParameters.xHeaderIndex]?.trim() !== '' && r[this.uiParameters.yHeaderIndex]?.trim() !== '' && isFinite(x) && isFinite(y)) {
-        pts.push([x, y]);
+      if (r.every(x => x.trim() !== '' && isFinite(Number(x)))) {
+        pts.push(r.map(x => Number(x)));
       }
     }
 
@@ -415,13 +415,13 @@ class ChartElement extends HTMLElement {
 
     // Changed: Draw the title with its selected font size and matching spacing.
     // TODO: Remove $
-    if ($('title').value) {
+    if (title) {
       ctx.font = `bold ${this.uiParameters.titleFontSize}px system-ui, sans-serif`;
       ctx.textBaseline = 'top';
       // Add some top padding for the title to avoid overlapping with the chart area.
       const titlePadding = 10;
 
-      ctx.fillText($('title').value, xLabelCenter, titlePadding);
+      ctx.fillText(title, xLabelCenter, titlePadding);
     }
 
     // data (clipped to the plot area so panned/zoomed data doesn't draw over margins)
@@ -435,15 +435,16 @@ class ChartElement extends HTMLElement {
     if (type === 'line') {
       ctx.lineWidth = 2; 
       ctx.beginPath();
-      this.#ptData.pts.forEach(([x, y], i) => (
-        i ? ctx.lineTo(this.toElementX(x), this.toElementY(y)) : ctx.moveTo(this.toElementX(x), this.toElementY(y))
+      this.#ptData.pts.forEach((r, i) => (
+        i ? ctx.lineTo(this.toElementX(r[this.uiParameters.xHeaderIndex]), this.toElementY(r[this.uiParameters.yHeaderIndex]))
+         : ctx.moveTo(this.toElementX(r[this.uiParameters.xHeaderIndex]), this.toElementY(r[this.uiParameters.yHeaderIndex]))
       ));
       ctx.stroke();
     } else {
       ctx.globalAlpha = this.#ptData.pts > 1000 ? 0.45 : 0.75;
       const r = this.#ptData.pts > 5000 ? 2 : 4;
-      for (const [x, y] of this.#ptData.pts) {
-        // TODO: Move check somewhere else, knowing which points are in bounds is helpful elsewhere as well
+      for (const row of this.#ptData.pts) {
+        const x = row[this.uiParameters.xHeaderIndex], y = row[this.uiParameters.yHeaderIndex];
         if (x >= this.#zoomDimensions.xMin && x <= this.#zoomDimensions.xMax && y >= this.#zoomDimensions.yMin && y <= this.#zoomDimensions.yMax) {
           ctx.beginPath(); 
           ctx.arc(this.toElementX(x), this.toElementY(y), r, 0, Math.PI * 2);

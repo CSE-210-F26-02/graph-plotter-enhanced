@@ -156,22 +156,38 @@ $('sample').onclick = () => {
 };
 
 /* Resize handler */
-
-['xs', 'ys', 'type'].forEach(id => ($(id).onchange = () => {
-  // Different columns have a different range, so start from the full view
-  if (id !== 'type') chart.resetView();
-  if (id == 'xs') chart.uiParameters.xHeaderIndex = this.value;
-  if (id == 'ys') chart.uiParameters.yHeaderIndex = this.value;
-  chart.updateUIDimensions();
+$('xs').onchange = () => {
+  chart.uiParameters.xHeaderIndex = Number($('xs').value);
+  chart.resetView();
+  chart.updateZoomDimensions();
   chart.draw();
   adjustSaveButtonSize();
-}));
+};
+
+$('ys').onchange = () => {
+  chart.uiParameters.xHeaderIndex = Number($('ys').value);
+  chart.resetView();
+  chart.updateZoomDimensions();
+  chart.draw();
+  adjustSaveButtonSize();
+};
+
+$('type').onchange = () => {
+  chart.uiParameters.type = $('type').value;
+  chart.resetView();
+  chart.updateZoomDimensions();
+  chart.draw();
+  adjustSaveButtonSize();
+};
+
 $('title').oninput = () => {
   showWhichSaveButton();
+  chart.uiParameters.title = $('title').value;
   chart.updateUIDimensions();
   chart.draw();
   adjustSaveButtonSize();
 };
+
 window.addEventListener('resize', () => {
   chart.updateUIDimensions();
   chart.draw();
