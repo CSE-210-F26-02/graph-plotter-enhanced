@@ -7,8 +7,8 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
  * Refactored the chart drawing logic out into this file
  */
 
-/**
- * @typedef {HTMLCanvasElement} ChartData
+/** OLD
+ * @typedef {Object} ChartData
  * @property {Array<Array<number>>} pts - All points represented by the chart.
  * @property {function} sx - Function for scaling plot-space x-coordinates to element-relative screen space.
  * @property {function} sy - Function for scaling plot-space y-coordinates to element-relative screen space.
@@ -21,6 +21,34 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
  * @property {number} ph - Plot height, in pixels.
  * @property {number} W - Width of the canvas element depicting the chart, in pixels.
  * @property {number} H - Width of the canvas element depicting the chart, in pixels.
+ */
+
+/** NEW
+ * @typedef {Object} ChartPointData - Represents data based solely on the chart's assigned points.
+ * @property {Array<Array<number>>} pts - All points represented by the chart.
+ * @property {number} xMin - Minimum x coordinate within the point set
+ * @property {number} yMin - Minimum y coordinate within the point set
+ * @property {number} xMax - Maximum x coordinate within the point set
+ * @property {number} yMax - Maximum y coordinate within the point set
+ */
+
+/** NEW
+ * @typedef {Object} ChartUIParameters - User controlled settings for how the chart is displayed
+ * @property {string} type - Type of chart to be depicted. Can be either 'scatter' or 'line'.
+ * @property {Array<string>} headers - List of headers availible for charting, read from input. Note both x and y use the same pool.
+ * @property {number} xHeaderIndex - Index of the x-axis header (formerly xi)
+ * @property {number} yHeaderIndex - Index of the y-axis header (formerly yi)
+ * @property {number} axisFontSize 
+ */
+
+/** NEW
+ * @typedef {Object} ChartUIDimensions - Dimensions used for UI scaling/alignment throughout the code, driven by chart's UI parameters.
+ * @property {function} toElementY - Function for scaling plot-space x-coordinates to element-relative screen space. (Formerly sx)
+ * @property {function} toElementX - Function for scaling plot-space y-coordinates to element-relative screen space. (Formerly sy)
+ * @property {number} L - Left margin extent of the plot relative to the canvas element, in pixels. Functions as base x-offset for graph region. 
+ * @property {number} T - Top margin extent of the plot relative to the canvas element, in pixels. Functions as base y-offset for graph region. 
+ * @property {number} pw - Plot width, in pixels.
+ * @property {number} ph - Plot height, in pixels.
  */
 
 /**
@@ -50,13 +78,17 @@ class ChartElement extends HTMLElement {
   #context;
   #tooltip;
 
-  graphRows = [];
-  graphHeaders = [];
-  /** @type {ChartData} */
-  cachedPlot;
+  /** @type {ChartPointData} */
+  ptData;
   
+  /** @type {ChartUIParameters} */
+  uiParameters;
+
   /** @type {ZoomParameters} */
   zoomParameters = {xScale: 1.0, yScale: 1.0, xTranslate: 0.0, yTranslate: 0.0}
+
+  /** @type {ChartUIDimensions} */
+  uiDimensions;
 
   // Drag and cursor state
   isDragging = false;
@@ -138,69 +170,36 @@ class ChartElement extends HTMLElement {
    * Draws the chart on the canvas based on the current data and selected options.
    * @param {string[][]} rows - The data rows to be plotted.
    * @param {string[]} headers - The headers corresponding to the data columns.
-   * @param {number} xs - The index of the X-axis column.
-   * By default, it uses the value from the 'xs' select element.
-   * @param {number} ys - The index of the Y-axis column.
-   * By default, it uses the value from the 'ys' select element.
+   * @param {number} xHeaderIndex - The index of the X-axis column.
+   * @param {number} yHeaderIndex - The index of the Y-axis column.
    * @param {string} type - The type of chart ('line' or 'scatter').
-   * By default, it uses the value from the 'type' select element.
    * @param {function|null} [completionHandler=null] -
    * Optional callback to be executed after the chart is drawn.
    * @returns {void}
    */
-  // TODO: Split this function, way too big
-  draw(
-    rows, 
-    headers, 
-    xs = +$('xs').value, 
-    ys = +$('ys').value, 
-    type =$('type').value, 
-    completionHandler = null
-  ) {
+  updateCache(rows, headers, xHeaderIndex, yHeaderIndex, type, completionHandler = null) {
     const cv = this.#canvas;
     const ctx = this.#context;
-    this.graphRows = rows;
-    this.graphHeaders = headers;
+
     if (!rows.length) return;
-    const xi = xs, yi = ys;
-
-    // Added: Use custom axis names when provided; otherwise use column names.
-    const xLabel = $('xlabel').value.trim() || headers[xi];
-    const yLabel = $('ylabel').value.trim() || headers[yi];
-
-    // Added: Read the shared axis-label size and the separate title size.
-    const axisFontSize = this.readFontSize('axis-font-size', 18);
-    const titleFontSize = this.readFontSize('title-font-size', 24);
-
-    // -- Update Cache data --
 
     // Read points from 'rows' into 'pts'
     let pts = [];
     for (const r of rows) {
-      const x = Number(r[xi]), y = Number(r[yi]);
-      if (r[xi]?.trim() !== '' && r[yi]?.trim() !== '' && isFinite(x) && isFinite(y)) pts.push([x, y]);
+      const x = Number(r[xHeaderIndex]), y = Number(r[yHeaderIndex]);
+      if (r[xHeaderIndex]?.trim() !== '' && r[yHeaderIndex]?.trim() !== '' && isFinite(x) && isFinite(y)) {
+         pts.push([x, y]);
+      }
     }
 
     if (!pts.length) {
       this.clearChart('No valid numeric points found in selected columns.');
-      return ($('err').textContent = 'No valid numbers in those columns.');
+      throw new Error('No valid numbers in specified columns.');
     }
-    $('err').textContent = '';
-    if (!this.isDragging && !this.zoomCursorTimeout) cv.style.cursor = 'grab';
 
-    // TODO: do we need the if statement?
-    if (type === 'line') pts.sort((a, b) => a[0] - b[0]);
+    pts.sort((a, b) => a[0] - b[0]);
 
-    
-    // size canvas for sharp rendering on retina screens
-    const dpr = window.devicePixelRatio || 1;
-    const W = cv.clientWidth, H = cv.clientHeight;
-    cv.width = W * dpr; 
-    cv.height = H * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-
-    // Find bounding box of charted points (min, max)
+    // Find bounding box of point set (min, max)
     let ptsXMin = Infinity, ptsXMax = -Infinity, ptsYMin = Infinity, ptsYMax = -Infinity;
     for (let i = 0; i < pts.length; i++) {
       const px = pts[i][0], py = pts[i][1];
@@ -212,36 +211,51 @@ class ChartElement extends HTMLElement {
     if (ptsXMin === ptsXMax) { ptsXMin -= 1; ptsXMax += 1; }
     if (ptsYMin === ptsYMax) { ptsYMin -= 1; ptsYMax += 1; }
 
-    // Apply unbounded zoom scaling and translation relative to data range
+    this.ptData = {pts:pts, xMin:ptsXMin, yMin:ptsYMin, xMax:ptsXMax, yMax:ptsYMax};
+
+    // TODO: Testing...
+    // size canvas for sharp rendering on retina screens
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; 
+    cv.height = H * dpr;
+
+    // Apply zoom scaling and translation relative to data range.
     const xRange = ptsXMax - ptsXMin;
     const yRange = ptsYMax - ptsYMin;
     const scaledXRange = xRange * this.zoomParameters.xScale;
     const scaledYRange = yRange * this.zoomParameters.yScale;
 
-    let xMin = ptsXMin + xRange * this.zoomParameters.xTranslate;
-    let yMin = ptsYMin + yRange * this.zoomParameters.yTranslate;
-    let xMax = xMin + scaledXRange;
-    let yMax = yMin + scaledYRange;
+    // Calculate bounds for zoomed frame.
+    let frameXMin = ptsXMin + xRange * this.zoomParameters.xTranslate;
+    let frameYMin = ptsYMin + yRange * this.zoomParameters.yTranslate;
+    let frameXMax = frameXMin + scaledXRange;
+    let frameYMax = frameYMin + scaledYRange;
 
-    // Pad
+    // Pad - TODO: Remove? Already dealing with zoom, could just bake into scale factors
     const padX = scaledXRange * 0.04, padY = scaledYRange * 0.06;
-    xMin -= padX; xMax += padX; yMin -= padY; yMax += padY;
+    frameXMin -= padX; frameXMax += padX; frameYMin -= padY; frameYMax += padY;
 
     // Calculate dynamic left margin based on Y-axis tick string width to prevent clipping
     ctx.font = '12px system-ui, sans-serif';
-    const yTicks = niceTicks(yMin, yMax);
-    const fmtY = tickFormatter(yMin, yMax);
+    const yTicks = niceTicks(frameYMin, frameYMax);
+    const fmtY = tickFormatter(frameYMin, frameYMax);
     let maxYTextWidth = 30;
     for (const t of yTicks) {
       const w = ctx.measureText(fmtY(t)).width;
       if (w > maxYTextWidth) maxYTextWidth = w;
     }
 
+    // Added: Read the shared axis-label size and the separate title size.
+    const axisFontSize = this.readFontSize('axis-font-size', 18);
+    const titleFontSize = this.readFontSize('title-font-size', 24);
+
     // Margin is any blank space outside of axis labels and grid lines
     // Changed: Reserve additional space for larger axis labels and titles.
     const leftMargin = Math.max(50, Math.ceil(maxYTextWidth + axisFontSize + 24));
     const rightMargin = 24;
-    const topMargin = $('title').value ? Math.max(40, titleFontSize + 25) : 20;
+    // TODO: Adapt to title existence - shrink more?
+    const topMargin = Math.max(40, titleFontSize + 25);
     const bottomMargin = Math.max(50, axisFontSize + 34);
 
     // Dimensions of the plot space in pixels
@@ -249,17 +263,49 @@ class ChartElement extends HTMLElement {
     const plotHeight = H - topMargin - bottomMargin;
 
     // Converts plot-space coordinates to ChartElement-relative screen positions.
-    const toElementX = x => leftMargin + (x - xMin) / (xMax - xMin) * plotWidth;       // data -> pixel
-    const toElementY = y => topMargin + plotHeight - (y - yMin) / (yMax - yMin) * plotHeight;
+    const toElementX = x => leftMargin + (x - frameXMin) / (frameXMax - frameXMin) * plotWidth;       // data -> pixel
+    const toElementY = y => topMargin + plotHeight - (y - frameYMin) / (frameYMax - frameYMin) * plotHeight;
 
     // Cache plot geometry for hover tooltip and pan/zoom lookups
-    this.cachedPlot = { pts, sx: toElementX, sy: toElementY, xi, yi, type, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H,
+    this.cachedPlot = { pts:pts, uiParams:{}, uiDims:{}};
+      
+     /* 
+      sx: toElementX, sy: toElementY, xi, yi, type, L: leftMargin, T: topMargin, pw: plotWidth, ph: plotHeight, W, H,
       xRange, yRange,
       xAbs: Math.max(Math.abs(ptsXMin), Math.abs(ptsXMax)),
-      yAbs: Math.max(Math.abs(ptsYMin), Math.abs(ptsYMax)) };
+      yAbs: Math.max(Math.abs(ptsYMin), Math.abs(ptsYMax)) };*/
 
-    // -- Draw --
+    this.cachedPlot.uiDims = {};
+    this.cachedPlot.uiParams = {headers:headers, xHeaderIndex:xHeaderIndex, yHeaderIndex:yHeaderIndex};
+  }
 
+  /**
+   * Draws the chart on the canvas based on the current data and selected options.
+   * @param {string[][]} rows - The data rows to be plotted.
+   * @param {string[]} headers - The headers corresponding to the data columns.
+   * @param {number} xs - The index of the X-axis column.
+   * By default, it uses the value from the 'xs' select element.
+   * @param {number} ys - The index of the Y-axis column.
+   * By default, it uses the value from the 'ys' select element.
+   * @param {string} type - The type of chart ('line' or 'scatter').
+   * By default, it uses the value from the 'type' select element.
+   * @param {function|null} [completionHandler=null] -
+   * Optional callback to be executed after the chart is drawn.
+   * @returns {void}
+   */
+  draw(completionHandler = null) {
+          // Added: Use custom axis names when provided; otherwise use column names.
+    const xLabel = $('xlabel').value.trim() || headers[xHeaderIndex];
+    const yLabel = $('ylabel').value.trim() || headers[yHeaderIndex];
+
+
+        // Why here?
+    //if (!this.isDragging && !this.zoomCursorTimeout) cv.style.cursor = 'grab';
+
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+        // -- Draw --
     // grid + tick labels
     // changed: Use dashed lines for gridlines to improve visual clarity.
     ctx.setLineDash([8,4]);
