@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Match the Docker image to your installed Playwright version
 v=$(npx playwright --version | sed 's/Version //' | tr -d '[:space:]')
 

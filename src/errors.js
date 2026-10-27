@@ -43,8 +43,19 @@ class InvalidFileTypeError extends Error {
     }
 }
 
+/**
+ * Represents an error that occurs when a malformed CSV is encountered.
+ */
+class MalformedCSVError extends Error {
+    constructor(message) {
+        super(message)
+        this.name = 'MalformedCSVError'
+    }
+}
+
 export {
     InvalidFileError,
+    MalformedCSVError,
     NoDataFoundError,
     NotEnoughColumnsError,
     InvalidFileTypeError,

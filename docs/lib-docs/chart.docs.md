@@ -114,7 +114,7 @@ Picks a "nice" (1, 2 or 5 times a power of ten) step for a numeric range.
 ### niceTicks(min, max, count) ⇒ <code>Array.&lt;number&gt;</code>
 
 Generates a "nice" set of tick values for a given numeric range.
-Works for any magnitude: each tick is computed as index * step (no running sum),
+Works for any magnitude: each tick is computed as index \* step (no running sum),
 values are rounded relative to the step, and the count is capped at MAX_TICKS.
 
 **Kind**: global function  

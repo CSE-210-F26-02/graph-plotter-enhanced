@@ -1,7 +1,7 @@
 {
     "name": "graph-plotter-enhanced",
     "private": true,
-    "description": "Client-side CSV scatter/line plotter. No build step; this file only defines the test command.",
+    "description": "Client-side CSV scatter/line plotter. No build step; this file only defines the test, lint and formatting scripts. Vite is used to serve the files in development mode.",
     "type": "module",
     "scripts": {
         "dev": "vite",

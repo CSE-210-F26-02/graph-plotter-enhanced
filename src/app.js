@@ -5,9 +5,14 @@ import {
     NotEnoughColumnsError,
 } from './errors.js'
 import { parseCSV } from './parser.js'
+import { ChartElement } from './chart.js'
 
 const $ = (id) => document.getElementById(id)
 const chart = $('demo-chart')
+// Upgrade the chart to a ChartElement instance so we can access it methods and properties.
+if (!chart.matches(':defined')) {
+    ChartElement.upgrade(chart)
+}
 
 const showWhichSaveButton = () => {
     if ($('title').value.trim() === '') {
@@ -111,6 +116,7 @@ function load(text, name) {
         })
         $('xs').value = numeric[0]
         $('ys').value = numeric[1]
+        console.log(chart)
         // New data: drop the previous zoom/pan so the whole dataset is visible
         chart.resetView()
         drawGraph()
@@ -176,9 +182,7 @@ $('sample').onclick = () => {
     load(csv, 'sample.csv')
 }
 
-/* Resize handler */
-
-;['xs', 'ys', 'type'].forEach(
+/* Resize handler */['xs', 'ys', 'type'].forEach(
     (id) =>
         ($(id).onchange = () => {
             // Different columns have a different range, so start from the full view
