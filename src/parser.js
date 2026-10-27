@@ -17,7 +17,6 @@ function parseCSV(text) {
     const out = []
     let row = [],
         field = '',
-        inQuotes = false,
         start = 0
     const regex = /"(?:[^"\\]|\\.)*"|\n/g
 
@@ -32,7 +31,7 @@ function parseCSV(text) {
             start = m.index + 1
             if (line.trim() === '') continue // skip empty lines
             field = ''
-            inQuotes = false
+            let inQuotes = false
             // Empty string skip
             for (let i = 0; i < line.length; i++) {
                 const c = line[i]

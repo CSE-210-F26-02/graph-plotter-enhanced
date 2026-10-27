@@ -4,7 +4,10 @@
     "description": "Client-side CSV scatter/line plotter. No build step; this file only defines the test command.",
     "type": "module",
     "scripts": {
-        "test": "node --test --test-reporter=spec"
+        "test": "node --test --test-reporter=spec",
+        "lint": "eslint . --ext .js",
+        "format": "prettier --write .",
+        "format-check": "prettier --check ."
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",

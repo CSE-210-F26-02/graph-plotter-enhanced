@@ -45,7 +45,6 @@ class InvalidFileTypeError extends Error {
 
 export {
     InvalidFileError,
-    MalformedCSVError,
     NoDataFoundError,
     NotEnoughColumnsError,
     InvalidFileTypeError,
