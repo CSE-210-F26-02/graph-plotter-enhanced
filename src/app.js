@@ -31,18 +31,6 @@ const adjustSaveButtonSize = () => {
 };
 
 let rows = [], fileName = '';
-/*
-const drawGraph = () => chart.draw(
-  rows,
-  headers,
-  +$('xs').value,
-  +$('ys').value,
-  $('type').value,
-  () => {
-    $('status').textContent =
-      `${fileName}: ${rows.length} rows, ${chart.getNumberOfPointsPlotted()} points plotted.`;
-  }
-);*/
 
 // Added: Reject non-CSV files and display an error on the chart.
 function validateCSVFile(file) {
@@ -155,38 +143,50 @@ $('sample').onclick = () => {
   load(csv, 'sample.csv');
 };
 
-/* Resize handler */
-$('xs').onchange = () => {
-  chart.uiParameters.xHeaderIndex = Number($('xs').value);
+$('xs').onchange = (e) => {
+  chart.uiParameters.xHeaderIndex = Number(e.target.value);
+  chart.resetView();
+  chart.updatePointRegion();
+  chart.draw();
+  adjustSaveButtonSize();
+};
+
+$('ys').onchange = (e) => {
+  chart.uiParameters.yHeaderIndex = Number(e.target.value);
+  chart.resetView();
+  chart.updatePointRegion();
+  chart.draw();
+  adjustSaveButtonSize();
+};
+
+$('type').onchange = (e) => {
+  chart.uiParameters.type = e.target.value;
   chart.resetView();
   chart.updateZoomDimensions();
   chart.draw();
   adjustSaveButtonSize();
 };
 
-$('ys').onchange = () => {
-  chart.uiParameters.xHeaderIndex = Number($('ys').value);
-  chart.resetView();
-  chart.updateZoomDimensions();
-  chart.draw();
-  adjustSaveButtonSize();
-};
-
-$('type').onchange = () => {
-  chart.uiParameters.type = $('type').value;
-  chart.resetView();
-  chart.updateZoomDimensions();
-  chart.draw();
-  adjustSaveButtonSize();
-};
-
-$('title').oninput = () => {
+$('title').oninput = (e) => {
   showWhichSaveButton();
-  chart.uiParameters.title = $('title').value;
+  chart.uiParameters.title = e.target.value;
   chart.updateUIDimensions();
   chart.draw();
   adjustSaveButtonSize();
 };
+
+$('xlabel').oninput = () => { chart.draw(); }
+$('ylabel').oninput = () => { chart.draw(); }
+
+function readFontSize(element, defaultValue) {
+  let value = defaultValue
+  if (element && element.value !== '')
+    value = Number(element.value);
+
+  return Number.isFinite(value)
+    ? Math.min(64, Math.max(8, Math.round(value)))
+    : defaultValue;
+}
 
 window.addEventListener('resize', () => {
   chart.updateUIDimensions();
@@ -199,12 +199,20 @@ const fontControls = [
   {
     inputId: 'axis-font-size',
     presetId: 'axis-font-preset',
-    defaultSize: 18
+    defaultSize: 18,
+    updateFunction: (newValue) => {
+      chart.uiParameters.axisFontSize = newValue;
+      chart.updateUIDimensions();
+    }
   },
   {
     inputId: 'title-font-size',
     presetId: 'title-font-preset',
-    defaultSize: 24
+    defaultSize: 24,
+    updateFunction: (newValue) => {
+      chart.uiParameters.titleFontSize = newValue
+      chart.updateUIDimensions();
+    }
   }
 ];
 
@@ -215,23 +223,15 @@ function syncFontPreset(input, preset) {
   );
 
   preset.value = matches ? input.value : '';
+  return input.value;
 }
 
 // Added: Restore empty defaults and constrain entered sizes to integers 8–64.
 function normalizeFontSize(control) {
   const input = $(control.inputId);
   const preset = $(control.presetId);
-  const value = input.value === ''
-    ? control.defaultSize
-    : Number(input.value);
-
-  input.value = String(
-    Number.isFinite(value)
-      ? Math.min(64, Math.max(8, Math.round(value)))
-      : control.defaultSize
-  );
-
-  syncFontPreset(input, preset);
+  input.value = String(readFontSize(input, control.defaultSize));
+  return syncFontPreset(input, preset);
 }
 
 fontControls.forEach(control => {
@@ -242,17 +242,21 @@ fontControls.forEach(control => {
   preset.addEventListener('change', () => {
     if (preset.value !== '') {
       input.value = preset.value;
+      control.updateFunction(Number(preset.value));
+      chart.draw();
     }
   });
 
   // Added: Allow free typing without changing the value mid-entry.
   input.addEventListener('input', () => {
-    syncFontPreset(input, preset);
+    control.updateFunction(Number(syncFontPreset(input, preset)));
+    chart.draw();
   });
 
   // Added: Validate the size when the user leaves the field.
   input.addEventListener('blur', () => {
-    normalizeFontSize(control);
+    control.updateFunction(Number(normalizeFontSize(control)));
+    chart.draw();
   });
 
   // Added: Keep the displayed defaults synchronized on startup.

@@ -7,22 +7,6 @@ import { niceTicks, tickFormatter, fmt } from './helpers.js';
  * Refactored the chart drawing logic out into this file
  */
 
-/** OLD
- * @typedef {Object} ChartData
- * @property {Array<Array<number>>} pts - All points represented by the chart.
- * @property {function} sx - Function for scaling plot-space x-coordinates to element-relative screen space.
- * @property {function} sy - Function for scaling plot-space y-coordinates to element-relative screen space.
- * @property {number} xi - Index of the x-axis header
- * @property {number} yi - Index of the y-axis header
- * @property {string} type - Type of chart to be depicted. Can be either 'scatter' or 'line'.
- * @property {number} L - Left margin extent of the plot relative to the canvas element, in pixels. Functions as base x-offset for graph region. 
- * @property {number} T - Top margin extent of the plot relative to the canvas element, in pixels. Functions as base y-offset for graph region. 
- * @property {number} pw - Plot width, in pixels.
- * @property {number} ph - Plot height, in pixels.
- * @property {number} W - Width of the canvas element depicting the chart, in pixels.
- * @property {number} H - Width of the canvas element depicting the chart, in pixels.
- */
-
 /**
  * @typedef {Object} ChartPointData - Represents data based solely on the chart's assigned points.
  * @property {Array<Array<number>>} pts - All points represented by the chart.
@@ -188,6 +172,11 @@ class ChartElement extends HTMLElement {
     this.#tooltip.style.display = 'none';
   }
 
+  /**
+   * Can think of update functions as a sort of pipeline, try to call the latest stage possible when changing parameters to limit repeated work.
+   * updatePointData -> updatePointRegion -> updateZoomDimensions -> updateUIDimensions
+   */ 
+
   /** Updates the ptData structure of the chart. Automatically calls updateZoomDimensions (and, by extension, updateUIDimensions), since all dimension data needs to be recalculated.
    * @param {string[][]} data - The data to be plotted, as row, col strings from a CSV file.
    */
@@ -207,12 +196,23 @@ class ChartElement extends HTMLElement {
       throw new Error('No valid numbers in specified columns.');
     }
 
-    pts.sort((a, b) => a[0] - b[0]);
+    this.#ptData = {pts:pts};
+    this.updatePointRegion();
+  }
 
+  /**
+   * Updates the bounding box around the points selected for charting.
+   * Call if changing the header indices.
+   * Automatically calls updateZoomDimensions.
+   */
+  updatePointRegion() {
     // Find bounding box of point set (min, max)
+    const xInd = this.uiParameters.xHeaderIndex, yInd = this.uiParameters.yHeaderIndex;
+    this.#ptData.pts.sort((a, b) => a[xInd] - b[xInd]);
+
     let ptsXMin = Infinity, ptsXMax = -Infinity, ptsYMin = Infinity, ptsYMax = -Infinity;
-    for (let i = 0; i < pts.length; i++) {
-      const px = pts[i][0], py = pts[i][1];
+    for (let i = 0; i < this.#ptData.pts.length; i++) {
+      const px = this.#ptData.pts[i][xInd], py = this.#ptData.pts[i][yInd];
       if (px < ptsXMin) ptsXMin = px;
       if (px > ptsXMax) ptsXMax = px;
       if (py < ptsYMin) ptsYMin = py;
@@ -221,7 +221,7 @@ class ChartElement extends HTMLElement {
     if (ptsXMin === ptsXMax) { ptsXMin -= 1; ptsXMax += 1; }
     if (ptsYMin === ptsYMax) { ptsYMin -= 1; ptsYMax += 1; }
 
-    this.#ptData = {pts:pts, xMin:ptsXMin, yMin:ptsYMin, xMax:ptsXMax, yMax:ptsYMax, xRange: ptsXMax - ptsXMin, yRange: ptsYMax - ptsYMin};
+    this.#ptData = {pts:this.#ptData.pts, xMin:ptsXMin, yMin:ptsYMin, xMax:ptsXMax, yMax:ptsYMax, xRange: ptsXMax - ptsXMin, yRange: ptsYMax - ptsYMin};
     this.updateZoomDimensions();
   }
 
@@ -296,7 +296,7 @@ class ChartElement extends HTMLElement {
    * @param {Number} graphX 
    */
   toElementY(graphY) {
-    // TODO: Review
+    // TODO: Review equation
     return this.#uiDimensions.topMargin + this.#uiDimensions.plotHeight - (graphY - this.#zoomDimensions.yMin) / ( this.#zoomDimensions.yMax -  this.#zoomDimensions.yMin) * this.#uiDimensions.plotHeight;
   }
 
@@ -311,8 +311,7 @@ class ChartElement extends HTMLElement {
    * @returns {void}
    */
     // Added: Read the shared axis-label size and the separate title size.
-    //const axisFontSize = this.readFontSize('axis-font-size', 18);
-    // const titleFontSize = this.readFontSize('title-font-size', 24);
+
 
 
 
@@ -336,7 +335,7 @@ class ChartElement extends HTMLElement {
     // Added: Use custom axis names when provided; otherwise use column names.
 
 
-    // TODO: Testing...
+    // TODO: Test if this works/is actually needed
     // size canvas for sharp rendering on retina screens
     const dpr = window.devicePixelRatio || 1;
     const W = cv.clientWidth, H = cv.clientHeight;
@@ -415,13 +414,13 @@ class ChartElement extends HTMLElement {
 
     // Changed: Draw the title with its selected font size and matching spacing.
     // TODO: Remove $
-    if (title) {
+    if (this.uiParameters.title) {
       ctx.font = `bold ${this.uiParameters.titleFontSize}px system-ui, sans-serif`;
       ctx.textBaseline = 'top';
       // Add some top padding for the title to avoid overlapping with the chart area.
       const titlePadding = 10;
 
-      ctx.fillText(title, xLabelCenter, titlePadding);
+      ctx.fillText(this.uiParameters.title, xLabelCenter, titlePadding);
     }
 
     // data (clipped to the plot area so panned/zoomed data doesn't draw over margins)
@@ -432,7 +431,7 @@ class ChartElement extends HTMLElement {
 
     ctx.fillStyle = COLOR; 
     ctx.strokeStyle = COLOR;
-    if (type === 'line') {
+    if (this.uiParameters.type === "line") {
       ctx.lineWidth = 2; 
       ctx.beginPath();
       this.#ptData.pts.forEach((r, i) => (
@@ -456,19 +455,6 @@ class ChartElement extends HTMLElement {
     ctx.restore();
 
     if (completionHandler) completionHandler();
-  }
-
-  // Added: Read editable font sizes safely while the user is typing.
-  readFontSize(id, defaultSize) {
-    const input = $(id);
-
-    if (!input || input.value === '') return defaultSize;
-
-    const value = Number(input.value);
-
-    return Number.isFinite(value)
-      ? Math.min(64, Math.max(8, Math.round(value)))
-      : defaultSize;
   }
 
   getNumberOfPointsPlotted() {
@@ -552,13 +538,12 @@ class ChartElement extends HTMLElement {
       this.dragStartX = e.clientX;
       this.dragStartY = e.clientY;
       
-      // TODO: Double check comments are okay
       if (this.#uiDimensions.plotWidth > 0) {
 
-        this.zoomParameters.xTranslate -= (dx / this.#uiDimensions.plotWidth) * this.zoomParameters.xScale; // * 1.08;
+        this.zoomParameters.xTranslate -= (dx / this.#uiDimensions.plotWidth) * this.zoomParameters.xScale;
       }
       if (this.#uiDimensions.plotHeight > 0) {
-        this.zoomParameters.yTranslate += (dy / this.#uiDimensions.plotHeight) * this.zoomParameters.yScale;// * 1.12;
+        this.zoomParameters.yTranslate += (dy / this.#uiDimensions.plotHeight) * this.zoomParameters.yScale;
       }
 
       this.updateZoomDimensions();
@@ -774,3 +759,16 @@ class ChartElement extends HTMLElement {
 customElements.define('custom-chart', ChartElement);
 
 export { ChartElement };
+
+// Misc. design decision explanations:
+
+/** Why avoid referencing elements by id in chart.js?
+ *  - Generally, keeping UI and logic as separate as possible helps reduce overall complexity. Having random element look ups within
+ *    the code is less than ideal for maintaining a mental model of the program's operation.
+ *  - By referencing elements via id tag, the website designer is forced to follow a fixed pattern, restricting the library's applications.
+ */
+
+/** Why pipeline the update functions?
+ *  - Breaking the update process up into separate functions based on affected parameters limits how much work has to be done with each update.
+ *  - An argument could be made for changing the delination of pipeline stages, as this may depend on how the user is supposed to interact with the library.
+ */
