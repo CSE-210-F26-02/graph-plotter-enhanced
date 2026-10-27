@@ -55,6 +55,13 @@ test('Scenario 1: Bob visualizes his sales data', async ({ page }) => {
   // Expects a custom-chart element to be visible.
   await expect(chartContainer.locator('custom-chart')).toBeVisible();
 
+  // Load a file
+  const fileInput = page.locator('input[type="file"][accept=".csv"]');
+  await fileInput.setInputFiles('tests/e2e/data/sample-business-data.csv');
+
+  // Switch to line chart view.
+  await page.getByRole('button', { name: 'Line' }).click();
+
   // Use playwright screenshot regression checker to capture a baseline screenshot of the chart container.
   await expect(chartContainer).toHaveScreenshot('chart-container.png', {
     maxDiffPixels: 20,
