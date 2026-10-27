@@ -1,6 +1,8 @@
 // @ts-check
 import { test, expect } from '@playwright/test';
 
+const localUrl = 'http://localhost:5173';
+
 /**
  * ### Scenario 1
 
@@ -17,9 +19,7 @@ import { test, expect } from '@playwright/test';
 **Outcome**: Bob successfully creates a visual representation of his sales data, which helps him and his team understand trends and make informed business decisions.
 
 **Expectations**: Bob expects the graphing application to be user-friendly, responsive, and capable of accurately representing his sales data in a visually appealing manner.
- */
-
-const localUrl = 'http://localhost:5173';
+*/
 
 test('Scenario 1: Bob visualizes his sales data', async ({ page }) => {
   await page.goto(localUrl);
@@ -59,23 +59,236 @@ test('Scenario 1: Bob visualizes his sales data', async ({ page }) => {
   const fileInput = page.locator('input[type="file"][accept=".csv"]');
   await fileInput.setInputFiles('tests/e2e/data/sample-business-data.csv');
 
+  // Add a title to the chart.
+  await page.getByLabel('Title', { exact: true }).fill('Sales Data');
+  await page.getByLabel('Title size').fill('24');
+  // Add an X label to the chart.
+  await page.getByLabel('X label', { exact: true }).fill('Year');
+  await page.getByLabel('X/Y label size').fill('18');
+  // Add a Y label to the chart.
+  await page.getByLabel('Y label', { exact: true }).fill('Sales Amount (USD)');
+
   // Switch to line chart view.
   await page.getByRole('button', { name: 'Line' }).click();
 
+  // Click "Generate graph" button.
+  await page.getByRole('button', { name: 'Generate graph' }).click();
+
+  // Expect a control wrapper inside the chart container to be hidden, since the there's a title now.
+  await expect(chartContainer.locator('div.control-wrapper')).toBeHidden();
+
   // Use playwright screenshot regression checker to capture a baseline screenshot of the chart container.
-  await expect(chartContainer).toHaveScreenshot('chart-container.png', {
+  await expect(chartContainer).toHaveScreenshot('sales-year-over-year.png', {
     maxDiffPixels: 20,
     threshold: 0.2,
     animations: 'disabled'
   });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save PNG' }).click();
+  const download = await downloadPromise;
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
 });
 
-// test('get started link', async ({ page }) => {
-//   await page.goto('https://playwright.dev/');
+/** End of test scenario */
 
-//   // Click the get started link.
-//   await page.getByRole('link', { name: 'Get started' }).click();
+/** 
+ * ### Scenario 2
 
-//   // Expects page to have a heading with the name of Installation.
-//   await expect(page.getByRole('heading', { name: 'Installation' })).toBeVisible();
-// });
+**User**: Jooahn is a student who wants to analyze his study habits and performance.
+**Goal**: Jooahn wants to create visualizations of his study time and grades to identify patterns and improve his academic performance.
+**Steps**:
+1. Jooahn opens the graphing application on his tablet.
+2. Jooahn inputs his study hours and corresponding grades into the application.
+3. Jooahn selects a scatter plot to visualize the correlation between study time and performance.
+4. Jooahn customizes the graph by adding labels, titles, and choosing appropriate colors.
+5. Jooahn interacts with the graph by zooming in on specific data points and hovering over points for details.
+6. Jooahn saves and exports the graph to review his study habits over time.
+
+**Outcome**: Jooahn successfully creates visual representations of his study habits and performance, which helps him identify patterns and make informed decisions to improve his academic results.
+**Expectations**: Jooahn expects the graphing application to be easy to use, accurate, and capable of effectively representing his study data to aid in his academic improvement.
+ */
+
+test('Scenario 2: Jooahn analyzes study habits and performance', async ({ page }) => {
+  await page.goto(localUrl);
+
+  // Expect a h1 title to be visible.
+  await expect(page.getByRole('heading', { level: 1, name: 'Graph Plotter' })).toBeVisible();
+  // Expect a p with class="sub" and with text "Welcome to Graph Plotter"
+  await expect(page.locator('p.sub')).toHaveText('Load a CSV, pick two numeric columns, and plot a scatter or line graph. Runs fully in your browser.');
+  // Expect a file input element that accepts csv files.
+  await expect(page.locator('input[type="file"][accept=".csv"]')).toBeVisible();
+
+  // Expects a div that has a class named "settings-panel"
+  await expect(page.locator('div.settings-panel')).toBeVisible();
+  const settingsPanel = page.locator('div.settings-panel');
+  await expect(settingsPanel.locator('.settings-row')).toHaveCount(3);
+
+  // Verify each of the following labels is present
+  await expect(settingsPanel.getByLabel('X axis')).toBeVisible();
+  await expect(settingsPanel.getByLabel('Y axis')).toBeVisible();
+  await expect(settingsPanel.getByLabel('Title', { exact: true })).toBeVisible();
+  await expect(settingsPanel.getByLabel('Title size')).toBeVisible();
+  await expect(settingsPanel.getByLabel('X label', { exact: true })).toBeVisible();
+  await expect(settingsPanel.getByLabel('Y label', { exact: true })).toBeVisible();
+  await expect(settingsPanel.getByLabel('X/Y label size')).toBeVisible();
+
+  // Expects a chart container div to be visible.
+  await expect(page.locator('div.chart-container')).toBeVisible();
+  const chartContainer = page.locator('div.chart-container');
+
+  // Expect a control wrapper inside the chart container, since the there's no tittle so download button is separate.
+  await expect(chartContainer.locator('div.control-wrapper')).toBeVisible();
+
+  // Expects a custom-chart element to be visible.
+  await expect(chartContainer.locator('custom-chart')).toBeVisible();
+
+  // Load a file
+  const fileInput = page.locator('input[type="file"][accept=".csv"]');
+  await fileInput.setInputFiles('tests/e2e/data/sample-study-data.csv');
+
+  // Add a title to the chart.
+  await page.getByLabel('Title', { exact: true }).fill('Study Hours vs Grade');
+  await page.getByLabel('Title size').fill('24');
+  // Add an X label to the chart.
+  await page.getByLabel('X label', { exact: true }).fill('Number Of Study Hours');
+  await page.getByLabel('X/Y label size').fill('18');
+  // Add a Y label to the chart.
+  await page.getByLabel('Y label', { exact: true }).fill('Grade');
+
+  // Switch to Scatter chart view.
+  await page.getByRole('button', { name: 'Scatter' }).click();
+
+  // Click "Generate graph" button.
+  await page.getByRole('button', { name: 'Generate graph' }).click();
+
+  // Expect a control wrapper inside the chart container to be hidden, since the there's a title now.
+  await expect(chartContainer.locator('div.control-wrapper')).toBeHidden();
+
+  // Use playwright screenshot regression checker to capture a baseline screenshot of the chart container.
+  await expect(chartContainer).toHaveScreenshot('study-hours-vs-grade.png', {
+    maxDiffPixels: 20,
+    threshold: 0.2,
+    animations: 'disabled'
+  });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save PNG' }).click();
+  const download = await downloadPromise;
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+});
+
+/** End of test scenario */
+
+/**
+ * ### Scenario 3
+
+**User**: Aster is a biologist who needs to present her findings to her team.
+**Goal**: Aster wants to create clear and informative visualizations of her research data to effectively communicate her results.
+**Steps**:
+1. Aster opens the graphing application on her laptop.
+2. Aster inputs her experimental data points into the application.
+3. Aster selects a scatter plot to visualize the relationship between variables.
+4. Aster customizes the graph by adding labels, titles, and choosing appropriate colors.
+5. Aster interacts with the graph by zooming in on specific data clusters and hovering over points for details.
+6. Aster saves and exports the graph to include in her presentation.
+
+**Outcome**: Aster successfully creates visual representations of her research data, which helps her team understand the findings and facilitates discussion during the presentation.
+**Expectations**: Aster expects the graphing application to be intuitive, flexible, and capable of accurately representing her research data in a clear and informative manner.
+*/
+
+test('Scenario 3: Aster creates a scatter plot for her research data', async ({ page }) => {
+  await page.goto(localUrl);
+
+  // Expect a h1 title to be visible.
+  await expect(page.getByRole('heading', { level: 1, name: 'Graph Plotter' })).toBeVisible();
+  // Expect a p with class="sub" and with text "Welcome to Graph Plotter"
+  await expect(page.locator('p.sub')).toHaveText('Load a CSV, pick two numeric columns, and plot a scatter or line graph. Runs fully in your browser.');
+  // Expect a file input element that accepts csv files.
+  await expect(page.locator('input[type="file"][accept=".csv"]')).toBeVisible();
+
+  // Expects a div that has a class named "settings-panel"
+  await expect(page.locator('div.settings-panel')).toBeVisible();
+  const settingsPanel = page.locator('div.settings-panel');
+  await expect(settingsPanel.locator('.settings-row')).toHaveCount(3);
+
+  // Verify each of the following labels is present
+  await expect(settingsPanel.getByLabel('X axis')).toBeVisible();
+  await expect(settingsPanel.getByLabel('Y axis')).toBeVisible();
+  await expect(settingsPanel.getByLabel('Title', { exact: true })).toBeVisible();
+  await expect(settingsPanel.getByLabel('Title size')).toBeVisible();
+  await expect(settingsPanel.getByLabel('X label', { exact: true })).toBeVisible();
+  await expect(settingsPanel.getByLabel('Y label', { exact: true })).toBeVisible();
+  await expect(settingsPanel.getByLabel('X/Y label size')).toBeVisible();
+
+  // Expects a chart container div to be visible.
+  await expect(page.locator('div.chart-container')).toBeVisible();
+  const chartContainer = page.locator('div.chart-container');
+
+  // Expect a control wrapper inside the chart container, since the there's no tittle so download button is separate.
+  await expect(chartContainer.locator('div.control-wrapper')).toBeVisible();
+
+  // Expects a custom-chart element to be visible.
+  await expect(chartContainer.locator('custom-chart')).toBeVisible();
+
+  // Load a file
+  const fileInput = page.locator('input[type="file"][accept=".csv"]');
+  await fileInput.setInputFiles('tests/e2e/data/sample-biology-data.csv');
+
+  // Add a title to the chart.
+  await page.getByLabel('Title', { exact: true }).fill('DNA Growth in a Controlled Laboratory Environment');
+  await page.getByLabel('Title size').fill('24');
+  // Add an X label to the chart.
+  await page.getByLabel('X label', { exact: true }).fill('Time (hours)');
+  await page.getByLabel('X/Y label size').fill('18');
+  // Add a Y label to the chart.
+  await page.getByLabel('Y label', { exact: true }).fill('DNA Concentration in Solution (M)');
+
+  // Switch to Scatter chart view.
+  await page.getByRole('button', { name: 'Scatter' }).click();
+
+  // Click "Generate graph" button.
+  await page.getByRole('button', { name: 'Generate graph' }).click();
+
+  // Expect a control wrapper inside the chart container to be hidden, since the there's a title now.
+  await expect(chartContainer.locator('div.control-wrapper')).toBeHidden();
+
+  // Use playwright screenshot regression checker to capture a baseline screenshot of the chart container.
+  await expect(chartContainer).toHaveScreenshot('dna-growth-in-lab.png', {
+    maxDiffPixels: 20,
+    threshold: 0.2,
+    animations: 'disabled'
+  });
+
+  // Zoom in on the chart.
+  // Get canvas component inside the custom-chart element.
+  const canvas = chartContainer.locator('custom-chart canvas');
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error('Canvas bounding box not found');
+  // Click on area then use scroll wheel to zoom in.
+  await canvas.scrollIntoViewIfNeeded();
+  const x = box.x + 100
+  const y = box.y + box.height - 30;
+  await page.mouse.move(x, y);
+  await page.mouse.wheel(0, -300);
+  for (let i = 0; i < 20; i++) {
+    await page.mouse.wheel(0, -100);
+  }
+  // Wait for a short period to allow the zoom action to take effect.
+  await page.waitForTimeout(500);
+  // Optionally, take a screenshot after zooming in.
+  await expect(chartContainer).toHaveScreenshot('dna-growth-in-lab-zoomed.png', {
+    maxDiffPixels: 20,
+    threshold: 0.2,
+    animations: 'disabled'
+  });
+
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save PNG' }).click();
+  const download = await downloadPromise;
+  const downloadPath = await download.path();
+  expect(downloadPath).not.toBeNull();
+});
