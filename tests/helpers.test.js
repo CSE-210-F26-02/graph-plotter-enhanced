@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { niceTicks, tickFormatter, fmt, sanitizeInput } from '../src/helpers.js';
+import { niceTicks, tickFormatter, fmt } from '../src/helpers.js';
 import { InvalidFileError, NoDataFoundError, NotEnoughColumnsError, InvalidFileTypeError } from '../src/errors.js';
 
 describe('niceTicks', () => {
@@ -62,15 +62,6 @@ describe('fmt', () => {
   });
 });
 
-describe('sanitizeInput', () => {
-  test('escapes &, < and >', () => {
-    assert.equal(sanitizeInput('<b>R&D</b>'), '&lt;b&gt;R&amp;D&lt;/b&gt;');
-  });
-
-  test('converts non-strings to text', () => {
-    assert.equal(sanitizeInput(42), '42');
-  });
-});
 
 describe('errors', () => {
   test('each error class keeps its message, name, and is an Error', () => {

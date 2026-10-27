@@ -1,706 +1,710 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Graph Plotter</title>
-        <link rel="stylesheet" href="style.css" />
 
-        <style>
-            /* Changed: Apply a neutral gray and white palette. */
-            :root {
-                color: #272b33;
-                background: #f5f6f8;
-                font-family: Arial, Helvetica, sans-serif;
-            }
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Graph Plotter</title>
+  <link rel="stylesheet" href="style.css">
 
-            body {
-                background: #f5f6f8;
-                color: #272b33;
-            }
+  <style>
+    /* Changed: Apply a neutral gray and white palette. */
+    :root {
+      color: #272b33;
+      background: #f5f6f8;
+      font-family: Arial, Helvetica, sans-serif;
+    }
 
-            main {
-                color: #272b33;
-            }
+    body {
+      background: #f5f6f8;
+      color: #272b33;
+    }
 
-            /* Changed: Preserve the existing heading size while updating its color. */
-            main > h1 {
-                color: #272b33;
-            }
+    main {
+      color: #272b33;
+    }
 
-            main > .sub,
-            #status {
-                color: #737983;
-            }
+    /* Changed: Preserve the existing heading size while updating its color. */
+    main>h1 {
+      color: #272b33;
+    }
 
-            #err {
-                color: #b42318;
-            }
+    main>.sub,
+    #status {
+      color: #737983;
+    }
 
-            /* Added: Use a one-third upload panel and a two-thirds settings panel. */
-            .plot-controls {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-                gap: 16px;
-                margin: 24px 0 20px;
-            }
+    #err {
+      color: #b42318;
+    }
 
-            .upload-panel,
-            .settings-panel {
-                min-width: 0;
-                box-sizing: border-box;
-                border: 1px solid #e7e9ed;
-                border-radius: 12px;
-                background: #fff;
-                box-shadow: 0 2px 8px rgba(25, 30, 40, 0.025);
-            }
+    /* Added: Use a one-third upload panel and a two-thirds settings panel. */
+    .plot-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+      gap: 16px;
+      margin: 24px 0 20px;
+    }
 
-            .upload-panel {
-                display: flex;
-                padding: 10px;
-            }
+    .upload-panel,
+    .settings-panel {
+      min-width: 0;
+      box-sizing: border-box;
+      border: 1px solid #e7e9ed;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(25, 30, 40, 0.025);
+    }
 
-            /* Added: Make the entire left panel a visible file drop area. */
-            .upload-zone {
-                width: 100%;
-                min-height: 250px;
-                box-sizing: border-box;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                padding: 28px 24px;
-                border: 1px dashed #d7dbe2;
-                border-radius: 8px;
-                background: #f8f9fa;
-                text-align: center;
-                transition:
-                    background 0.15s,
-                    border-color 0.15s;
-            }
+    .upload-panel {
+      display: flex;
+      padding: 10px;
+    }
 
-            .upload-zone.is-dragging {
-                background: #eceef1;
-                border-color: #707680;
-            }
+    /* Added: Make the entire left panel a visible file drop area. */
+    .upload-zone {
+      width: 100%;
+      min-height: 250px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 28px 24px;
+      border: 1px dashed #d7dbe2;
+      border-radius: 8px;
+      background: #f8f9fa;
+      text-align: center;
+      transition: background 0.15s, border-color 0.15s;
+    }
 
-            .upload-title {
-                margin: 0;
-                color: #272b33;
-                font-size: 18px;
-                font-weight: 700;
-            }
+    .upload-zone.is-dragging {
+      background: #eceef1;
+      border-color: #707680;
+    }
 
-            .upload-hint {
-                margin: 8px 0 20px;
-                color: #858b94;
-                font-size: 13px;
-            }
+    .upload-title {
+      margin: 0;
+      color: #272b33;
+      font-size: 18px;
+      font-weight: 700;
+    }
 
-            /* Added: Keep the file input accessible behind the Choose File label. */
-            .file-input {
-                position: absolute;
-                width: 1px;
-                height: 1px;
-                margin: -1px;
-                padding: 0;
-                border: 0;
-                overflow: hidden;
-                clip-path: inset(50%);
-                white-space: nowrap;
-            }
+    .upload-hint {
+      margin: 8px 0 20px;
+      color: #858b94;
+      font-size: 13px;
+    }
 
-            .upload-divider {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                width: min(100%, 240px);
-                margin: 13px 0;
-                color: #9298a1;
-                font-size: 12px;
-            }
+    /* Added: Keep the file input accessible behind the Choose File label. */
+    .file-input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
 
-            .upload-divider::before,
-            .upload-divider::after {
-                content: '';
-                flex: 1;
-                height: 1px;
-                background: #e0e3e8;
-            }
+    .upload-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: min(100%, 240px);
+      margin: 13px 0;
+      color: #9298a1;
+      font-size: 12px;
+    }
 
-            /* Changed: Match button height, corners, and neutral colors. */
-            .plot-controls .ui-button,
-            #chart-wrap > .save-button,
-            #chart-wrap > .control-wrapper > .save-button {
-                box-sizing: border-box;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                gap: 9px;
-                min-height: 40px;
-                margin: 0;
-                padding: 0 16px;
-                border: 1px solid #d8dce2;
-                border-radius: 6px;
-                background: #fff;
-                color: #343a43;
-                font: inherit;
-                font-size: 13px;
-                font-weight: 500;
-                line-height: 1.2;
-                text-decoration: none;
-                cursor: pointer;
-                transition:
-                    background 0.15s,
-                    border-color 0.15s;
-            }
+    .upload-divider::before,
+    .upload-divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: #e0e3e8;
+    }
 
-            .plot-controls .ui-button:hover,
-            #chart-wrap > .save-button:hover {
-                background: #eceef1;
-                border-color: #c1c6ce;
-            }
+    /* Changed: Match button height, corners, and neutral colors. */
+    .plot-controls .ui-button,
+    #chart-wrap>.save-button,
+    #chart-wrap>.control-wrapper>.save-button {
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      min-height: 40px;
+      margin: 0;
+      padding: 0 16px;
+      border: 1px solid #d8dce2;
+      border-radius: 6px;
+      background: #fff;
+      color: #343a43;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.2;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
 
-            .plot-controls .ui-button.primary {
-                border-color: #686e77;
-                background: #686e77;
-                color: #fff;
-            }
+    .plot-controls .ui-button:hover,
+    #chart-wrap>.save-button:hover {
+      background: #eceef1;
+      border-color: #c1c6ce;
+    }
 
-            .plot-controls .ui-button.primary:hover {
-                border-color: #555b64;
-                background: #555b64;
-            }
+    .plot-controls .ui-button.primary {
+      border-color: #686e77;
+      background: #686e77;
+      color: #fff;
+    }
 
-            .plot-controls .ui-button.secondary {
-                border-color: #eceef1;
-                background: #eceef1;
-                color: #343a43;
-            }
+    .plot-controls .ui-button.primary:hover {
+      border-color: #555b64;
+      background: #555b64;
+    }
 
-            .plot-controls .upload-zone .ui-button {
-                width: min(100%, 240px);
-                display: inline-flex;
-                flex-direction: row;
-                flex-wrap: nowrap;
-                align-items: center;
-                justify-content: center;
-                gap: 9px;
-                white-space: nowrap;
-            }
+    .plot-controls .ui-button.secondary {
+      border-color: #eceef1;
+      background: #eceef1;
+      color: #343a43;
+    }
 
-            .file-input:focus-visible + .ui-button,
-            .plot-controls button:focus-visible,
-            #chart-wrap > .save-button:focus-visible {
-                outline: 2px solid #7a818c;
-                outline-offset: 3px;
-            }
+    .plot-controls .upload-zone .ui-button {
+      width: min(100%, 240px);
+      display: inline-flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      white-space: nowrap;
+    }
 
-            .ui-icon {
-                width: 17px;
-                height: 17px;
-                flex-shrink: 0;
-                fill: none;
-                stroke: currentColor;
-                stroke-width: 1.7;
-                stroke-linecap: round;
-                stroke-linejoin: round;
-            }
+    .file-input:focus-visible+.ui-button,
+    .plot-controls button:focus-visible,
+    #chart-wrap>.save-button:focus-visible {
+      outline: 2px solid #7a818c;
+      outline-offset: 3px;
+    }
 
-            /* Added: Arrange settings into three tidy rows. */
-            .settings-panel {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-                padding: 16px;
-            }
+    .ui-icon {
+      width: 17px;
+      height: 17px;
+      flex-shrink: 0;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
 
-            .settings-row {
-                display: grid;
-                align-items: end;
-                gap: 14px;
-            }
+    /* Added: Arrange settings into three tidy rows. */
+    .settings-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px;
+    }
 
-            .settings-row.axis-row {
-                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(190px, 1.15fr);
-            }
+    .settings-row {
+      display: grid;
+      align-items: end;
+      gap: 14px;
+    }
 
-            .settings-row.title-row {
-                grid-template-columns: minmax(0, 1fr) 112px;
-            }
+    .settings-row.axis-row {
+      grid-template-columns:
+        minmax(0, 1fr) minmax(0, 1fr) minmax(190px, 1.15fr);
+    }
 
-            .settings-row.label-row {
-                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 112px;
-            }
+    .settings-row.title-row {
+      grid-template-columns: minmax(0, 1fr) 112px;
+    }
 
-            .settings-panel .field {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-                min-width: 0;
-                margin: 0;
-                color: #727983;
-                font-size: 12px;
-                font-weight: 400;
-            }
+    .settings-row.label-row {
+      grid-template-columns:
+        minmax(0, 1fr) minmax(0, 1fr) 112px;
+    }
 
-            /* Changed: Give text inputs and selects matching dimensions. */
-            .settings-panel .field > input,
-            .settings-panel .field > select {
-                display: block;
-                width: 100%;
-                min-width: 0;
-                height: 40px;
-                box-sizing: border-box;
-                margin: 0;
-                padding: 0 12px;
-                border: 1px solid #dce0e6;
-                border-radius: 6px;
-                background: #fff;
-                color: #343a43;
-                font: inherit;
-                font-size: 13px;
-            }
+    .settings-panel .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      margin: 0;
+      color: #727983;
+      font-size: 12px;
+      font-weight: 400;
+    }
 
-            .settings-panel input::placeholder {
-                color: #9298a1;
-            }
+    /* Changed: Give text inputs and selects matching dimensions. */
+    .settings-panel .field>input,
+    .settings-panel .field>select {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      height: 40px;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0 12px;
+      border: 1px solid #dce0e6;
+      border-radius: 6px;
+      background: #fff;
+      color: #343a43;
+      font: inherit;
+      font-size: 13px;
+    }
 
-            .settings-panel .field > input:focus,
-            .settings-panel .field > select:focus {
-                border-color: #8b929d;
-                outline: 2px solid rgba(110, 118, 130, 0.12);
-                outline-offset: 1px;
-            }
+    .settings-panel input::placeholder {
+      color: #9298a1;
+    }
 
-            /* Added: Replace the visible chart selector with Scatter and Line buttons. */
-            #type[hidden] {
-                display: none !important;
-            }
+    .settings-panel .field>input:focus,
+    .settings-panel .field>select:focus {
+      border-color: #8b929d;
+      outline: 2px solid rgba(110, 118, 130, 0.12);
+      outline-offset: 1px;
+    }
 
-            .chart-type-buttons {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 8px;
-            }
+    /* Added: Replace the visible chart selector with Scatter and Line buttons. */
+    #type[hidden] {
+      display: none !important;
+    }
 
-            .plot-controls .chart-type-button {
-                width: 100%;
-                padding: 0 10px;
-            }
+    .chart-type-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
 
-            .plot-controls .chart-type-button.is-active {
-                border-color: #686e77;
-                background: #686e77;
-                color: #fff;
-            }
+    .plot-controls .chart-type-button {
+      width: 100%;
+      padding: 0 10px;
+    }
 
-            /* Changed: Keep editable sizes and preset dropdowns in one unified box. */
-            .font-size-control {
-                position: relative;
-                display: flex;
-                width: 100%;
-                height: 40px;
-                box-sizing: border-box;
-                overflow: hidden;
-                border: 1px solid #dce0e6;
-                border-radius: 6px;
-                background: #fff;
-            }
+    .plot-controls .chart-type-button.is-active {
+      border-color: #686e77;
+      background: #686e77;
+      color: #fff;
+    }
 
-            .font-size-control:focus-within {
-                border-color: #8b929d;
-                outline: 2px solid rgba(110, 118, 130, 0.12);
-                outline-offset: 1px;
-            }
+    /* Changed: Keep editable sizes and preset dropdowns in one unified box. */
+    .font-size-control {
+      position: relative;
+      display: flex;
+      width: 100%;
+      height: 40px;
+      box-sizing: border-box;
+      overflow: hidden;
+      border: 1px solid #dce0e6;
+      border-radius: 6px;
+      background: #fff;
+    }
 
-            .settings-panel .font-size-control input {
-                flex: 1;
-                width: 0;
-                min-width: 0;
-                height: 100%;
-                box-sizing: border-box;
-                margin: 0;
-                padding: 0 12px;
-                border: 0;
-                border-radius: 0;
-                background: transparent;
-                color: #343a43;
-                font: inherit;
-                font-size: 13px;
-                outline: none;
-                box-shadow: none;
-                appearance: textfield;
-                -moz-appearance: textfield;
-            }
+    .font-size-control:focus-within {
+      border-color: #8b929d;
+      outline: 2px solid rgba(110, 118, 130, 0.12);
+      outline-offset: 1px;
+    }
 
-            .font-size-control input::-webkit-inner-spin-button,
-            .font-size-control input::-webkit-outer-spin-button {
-                -webkit-appearance: none;
-                margin: 0;
-            }
+    .settings-panel .font-size-control input {
+      flex: 1;
+      width: 0;
+      min-width: 0;
+      height: 100%;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: #343a43;
+      font: inherit;
+      font-size: 13px;
+      outline: none;
+      box-shadow: none;
+      appearance: textfield;
+      -moz-appearance: textfield;
+    }
 
-            .settings-panel .font-size-control select {
-                flex: 1 0;
-                /* I removed the fixed 32px width to allow flexible sizing and add padding for the selector */
-                height: 100%;
-                box-sizing: border-box;
-                margin: 0;
-                padding: 8px;
-                border: 0;
-                border-radius: 0;
-                background: transparent;
-                color: transparent;
-                cursor: pointer;
-                outline: none;
-                box-shadow: none;
-                appearance: none;
-                -webkit-appearance: none;
-            }
+    .font-size-control input::-webkit-inner-spin-button,
+    .font-size-control input::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
 
-            .font-size-control select option {
-                color: #343a43;
-                background: #fff;
-            }
+    .settings-panel .font-size-control select {
+      flex: 1 0;
+      /* I removed the fixed 32px width to allow flexible sizing and add padding for the selector */
+      height: 100%;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 8px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: transparent;
+      cursor: pointer;
+      outline: none;
+      box-shadow: none;
+      appearance: none;
+      -webkit-appearance: none;
+    }
 
-            .font-size-control::after {
-                content: '▾';
-                position: absolute;
-                right: 11px;
-                top: 50%;
-                transform: translateY(-50%);
-                color: #727983;
-                pointer-events: none;
-            }
+    .font-size-control select option {
+      color: #343a43;
+      background: #fff;
+    }
 
-            .settings-actions {
-                display: flex;
-                justify-content: flex-end;
-                margin-top: auto;
-            }
+    .font-size-control::after {
+      content: "▾";
+      position: absolute;
+      right: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #727983;
+      pointer-events: none;
+    }
 
-            /* Changed: Place Save inside the chart's top-right corner.
+    .settings-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: auto;
+    }
+
+    /* Changed: Place Save inside the chart's top-right corner.
        Existing chart and canvas dimensions remain unchanged. */
-            #chart-wrap {
-                position: relative;
-                border-color: #e7e9ed;
-                border-radius: 12px;
-                background: #fff;
-                box-shadow: 0 2px 8px rgba(25, 30, 40, 0.025);
-            }
+    #chart-wrap {
+      position: relative;
+      border-color: #e7e9ed;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(25, 30, 40, 0.025);
+    }
 
-            #chart-wrap > .save-button {
-                position: absolute;
-                top: 10px;
-                right: 10px;
-                z-index: 2;
-                min-height: 32px;
-            }
+    #chart-wrap >.save-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 2;
+      min-height: 32px;
+    }
 
-            #chart-wrap > .control-wrapper {
-                display: flex;
-                justify-content: flex-end;
-                padding: 4px;
-            }
+    #chart-wrap>.control-wrapper {
+      display: flex;
+      justify-content: flex-end;
+      padding: 4px;
+    }
 
-            #chart-wrap > .save-button,
-            #chart-wrap > .control-wrapper > .save-button {
-                padding: 0 12px;
-                border-color: transparent;
-                background: #f1f3f5;
-                color: #636b77;
-                font-size: 12px;
-            }
+    #chart-wrap>.save-button,
+    #chart-wrap>.control-wrapper>.save-button {
+      padding: 0 12px;
+      border-color: transparent;
+      background: #f1f3f5;
+      color: #636b77;
+      font-size: 12px;
+    }
 
-            /* Added: Stack the panels and controls on smaller screens. */
-            @media (max-width: 760px) {
-                .plot-controls {
-                    grid-template-columns: minmax(0, 1fr);
-                }
+    /* Added: Stack the panels and controls on smaller screens. */
+    @media (max-width: 760px) {
+      .plot-controls {
+        grid-template-columns: minmax(0, 1fr);
+      }
 
-                .upload-zone {
-                    min-height: 220px;
-                }
+      .upload-zone {
+        min-height: 220px;
+      }
 
-                .settings-row.axis-row {
-                    grid-template-columns: repeat(2, minmax(0, 1fr));
-                }
+      .settings-row.axis-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
 
-                .chart-type-buttons {
-                    grid-column: 1 / -1;
-                }
-            }
+      .chart-type-buttons {
+        grid-column: 1 / -1;
+      }
+    }
 
-            @media (max-width: 480px) {
-                .settings-panel {
-                    padding: 16px;
-                }
+    @media (max-width: 480px) {
+      .settings-panel {
+        padding: 16px;
+      }
 
-                .settings-row.label-row {
-                    grid-template-columns: minmax(0, 1fr);
-                }
+      .settings-row.label-row {
+        grid-template-columns: minmax(0, 1fr);
+      }
 
-                .settings-row.label-row .font-size-control {
-                    width: 112px;
-                }
-            }
+      .settings-row.label-row .font-size-control {
+        width: 112px;
+      }
+    }
 
-            /* Changed: Match the sample button to the Choose File button. */
-            .plot-controls #sample {
-                background: #e5e6e8;
-                border: 1px solid transparent;
-                color: #636b77;
-                border-radius: 6px;
-                box-shadow: none;
-                font-size: 13px;
-                font-weight: 500;
-            }
+    /* Changed: Match the sample button to the Choose File button. */
+    .plot-controls #sample {
+      background: #e5e6e8;
+      border: 1px solid transparent;
+      color: #636b77;
+      border-radius: 6px;
+      box-shadow: none;
+      font-size: 13px;
+      font-weight: 500;
+    }
 
-            .plot-controls #sample:hover {
-                background: #dddee0;
-                border-color: transparent;
-                color: #4b5563;
-            }
-        </style>
-    </head>
+    .plot-controls #sample:hover {
+      background: #dddee0;
+      border-color: transparent;
+      color: #4b5563;
+    }
+  </style>
+</head>
 
-    <body>
-        <main>
-            <h1>Graph Plotter</h1>
-            <p class="sub">Load a CSV, pick two numeric columns, and plot a scatter or line graph. Runs fully in your browser.</p>
+<body>
+  <main>
+    <h1>Graph Plotter</h1>
+    <p class="sub">
+      Load a CSV, pick two numeric columns, and plot a scatter or line graph.
+      Runs fully in your browser.
+    </p>
 
-            <!-- Changed: Place the upload area and settings side by side. -->
-            <div class="plot-controls">
-                <!-- Added: Large file upload area without an extra section heading. -->
-                <div class="upload-panel">
-                    <div class="upload-zone" id="upload-zone">
-                        <p class="upload-title">Drop your file here</p>
-                        <p class="upload-hint">CSV file</p>
+    <!-- Changed: Place the upload area and settings side by side. -->
+    <div class="plot-controls">
 
-                        <input type="file" id="file" class="file-input" accept=".csv" />
+      <!-- Added: Large file upload area without an extra section heading. -->
+      <div class="upload-panel">
+        <div class="upload-zone" id="upload-zone">
+          <p class="upload-title">Drop your file here</p>
+          <p class="upload-hint">CSV file</p>
 
-                        <label for="file" class="ui-button primary">
-                            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z" />
-                            </svg>
-                            Choose File
-                        </label>
+          <input type="file" id="file" class="file-input" accept=".csv">
 
-                        <div class="upload-divider">or</div>
+          <label for="file" class="ui-button primary">
+            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10H3z" />
+            </svg>
+            Choose File
+          </label>
 
-                        <button id="sample" class="ui-button secondary">
-                            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M4 20h16M6 17v-6h3v6M11 17V5h3v12M16 17V8h3v9" />
-                            </svg>
-                            Use sample data
-                        </button>
-                    </div>
-                </div>
+          <div class="upload-divider">or</div>
 
-                <div class="settings-panel">
-                    <div class="settings-row axis-row">
-                        <label class="field">
-                            X axis
-                            <select id="xs"></select>
-                        </label>
+          <button id="sample" class="ui-button secondary">
+            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 20h16M6 17v-6h3v6M11 17V5h3v12M16 17V8h3v9" />
+            </svg>
+            Use sample data
+          </button>
+        </div>
+      </div>
 
-                        <label class="field">
-                            Y axis
-                            <select id="ys"></select>
-                        </label>
+      <div class="settings-panel">
+        <div class="settings-row axis-row">
+          <label class="field">
+            X axis
+            <select id="xs"></select>
+          </label>
 
-                        <!-- Added: Keep the existing select for app.js compatibility. -->
-                        <select id="type" hidden aria-label="Chart type">
-                            <option value="scatter">Scatter</option>
-                            <option value="line">Line</option>
-                        </select>
+          <label class="field">
+            Y axis
+            <select id="ys"></select>
+          </label>
 
-                        <!-- Added: Switch chart types with visible buttons. -->
-                        <div class="chart-type-buttons" role="group" aria-label="Chart type">
-                            <button type="button" class="ui-button chart-type-button is-active" data-chart-type="scatter" aria-pressed="true">
-                                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <circle cx="6" cy="7" r="1" />
-                                    <circle cx="12" cy="5" r="1" />
-                                    <circle cx="18" cy="9" r="1" />
-                                    <circle cx="8" cy="15" r="1" />
-                                    <circle cx="15" cy="17" r="1" />
-                                    <circle cx="19" cy="14" r="1" />
-                                </svg>
-                                Scatter
-                            </button>
+          <!-- Added: Keep the existing select for app.js compatibility. -->
+          <select id="type" hidden aria-label="Chart type">
+            <option value="scatter">Scatter</option>
+            <option value="line">Line</option>
+          </select>
 
-                            <button type="button" class="ui-button chart-type-button" data-chart-type="line" aria-pressed="false">
-                                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M4 5v14h16M7 15l4-5 4 2 5-7" />
-                                </svg>
-                                Line
-                            </button>
-                        </div>
-                    </div>
+          <!-- Added: Switch chart types with visible buttons. -->
+          <div class="chart-type-buttons" role="group" aria-label="Chart type">
+            <button type="button" class="ui-button chart-type-button is-active" data-chart-type="scatter"
+              aria-pressed="true">
+              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="6" cy="7" r="1" />
+                <circle cx="12" cy="5" r="1" />
+                <circle cx="18" cy="9" r="1" />
+                <circle cx="8" cy="15" r="1" />
+                <circle cx="15" cy="17" r="1" />
+                <circle cx="19" cy="14" r="1" />
+              </svg>
+              Scatter
+            </button>
 
-                    <div class="settings-row title-row">
-                        <label class="field">
-                            Title
-                            <input type="text" id="title" placeholder="Optional" />
-                        </label>
+            <button type="button" class="ui-button chart-type-button" data-chart-type="line" aria-pressed="false">
+              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5v14h16M7 15l4-5 4 2 5-7" />
+              </svg>
+              Line
+            </button>
+          </div>
+        </div>
 
-                        <label class="field">
-                            Title size
-                            <span class="font-size-control">
-                                <input type="number" id="title-font-size" min="8" max="64" step="1" value="24" />
+        <div class="settings-row title-row">
+          <label class="field">
+            Title
+            <input type="text" id="title" placeholder="Optional">
+          </label>
 
-                                <select id="title-font-preset" aria-label="Choose title font size" class="font-preset">
-                                    <option value="" disabled>Custom</option>
-                                    <option value="8">8</option>
-                                    <option value="12">12</option>
-                                    <option value="16">16</option>
-                                    <option value="20">20</option>
-                                    <option value="24" selected>24</option>
-                                    <option value="28">28</option>
-                                    <option value="32">32</option>
-                                    <option value="36">36</option>
-                                    <option value="40">40</option>
-                                    <option value="44">44</option>
-                                    <option value="48">48</option>
-                                    <option value="52">52</option>
-                                    <option value="56">56</option>
-                                    <option value="60">60</option>
-                                    <option value="64">64</option>
-                                </select>
-                            </span>
-                        </label>
-                    </div>
+          <label class="field">
+            Title size
+            <span class="font-size-control">
+              <input type="number" id="title-font-size" min="8" max="64" step="1" value="24">
 
-                    <div class="settings-row label-row">
-                        <label class="field">
-                            X label
-                            <input type="text" id="xlabel" placeholder="Use X column name" />
-                        </label>
+              <select id="title-font-preset" aria-label="Choose title font size" class="font-preset">
+                <option value="" disabled>Custom</option>
+                <option value="8">8</option>
+                <option value="12">12</option>
+                <option value="16">16</option>
+                <option value="20">20</option>
+                <option value="24" selected>24</option>
+                <option value="28">28</option>
+                <option value="32">32</option>
+                <option value="36">36</option>
+                <option value="40">40</option>
+                <option value="44">44</option>
+                <option value="48">48</option>
+                <option value="52">52</option>
+                <option value="56">56</option>
+                <option value="60">60</option>
+                <option value="64">64</option>
+              </select>
+            </span>
+          </label>
+        </div>
 
-                        <label class="field">
-                            Y label
-                            <input type="text" id="ylabel" placeholder="Use Y column name" />
-                        </label>
+        <div class="settings-row label-row">
+          <label class="field">
+            X label
+            <input type="text" id="xlabel" placeholder="Use X column name">
+          </label>
 
-                        <label class="field">
-                            X/Y label size
-                            <span class="font-size-control">
-                                <input type="number" id="axis-font-size" min="8" max="64" step="1" value="18" />
+          <label class="field">
+            Y label
+            <input type="text" id="ylabel" placeholder="Use Y column name">
+          </label>
 
-                                <select id="axis-font-preset" aria-label="Choose axis label font size" class="font-preset">
-                                    <option value="" disabled selected>Custom</option>
-                                    <option value="8">8</option>
-                                    <option value="12">12</option>
-                                    <option value="16">16</option>
-                                    <option value="20">20</option>
-                                    <option value="24">24</option>
-                                    <option value="28">28</option>
-                                    <option value="32">32</option>
-                                    <option value="36">36</option>
-                                    <option value="40">40</option>
-                                    <option value="44">44</option>
-                                    <option value="48">48</option>
-                                    <option value="52">52</option>
-                                    <option value="56">56</option>
-                                    <option value="60">60</option>
-                                    <option value="64">64</option>
-                                </select>
-                            </span>
-                        </label>
-                    </div>
+          <label class="field">
+            X/Y label size
+            <span class="font-size-control">
+              <input type="number" id="axis-font-size" min="8" max="64" step="1" value="18">
 
-                    <div class="settings-actions">
-                        <button id="generate" class="ui-button primary" type="button">
-                            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M4 5v14h16M7 15l4-5 4 2 5-7" />
-                            </svg>
-                            Generate graph
-                        </button>
-                    </div>
-                </div>
-            </div>
+              <select id="axis-font-preset" aria-label="Choose axis label font size" class="font-preset">
+                <option value="" disabled selected>Custom</option>
+                <option value="8">8</option>
+                <option value="12">12</option>
+                <option value="16">16</option>
+                <option value="20">20</option>
+                <option value="24">24</option>
+                <option value="28">28</option>
+                <option value="32">32</option>
+                <option value="36">36</option>
+                <option value="40">40</option>
+                <option value="44">44</option>
+                <option value="48">48</option>
+                <option value="52">52</option>
+                <option value="56">56</option>
+                <option value="60">60</option>
+                <option value="64">64</option>
+              </select>
+            </span>
+          </label>
+        </div>
 
-            <div class="chart-container" id="chart-wrap">
-                <!-- Used when there's no title else some of the data gets cut off by the button -->
-                <div class="control-wrapper">
-                    <button id="dl-no-title" class="save-button" type="button">
-                        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" />
-                        </svg>
-                        Save PNG
-                    </button>
-                </div>
+        <div class="settings-actions">
+          <button id="generate" class="ui-button primary" type="button">
+            <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 5v14h16M7 15l4-5 4 2 5-7" />
+            </svg>
+            Generate graph
+          </button>
+        </div>
+      </div>
+    </div>
 
-                <custom-chart id="demo-chart"></custom-chart>
+    <div class="chart-container" id="chart-wrap">
+      <!-- Used when there's no title else some of the data gets cut off by the button -->
+      <div class="control-wrapper"> 
+        <button id="dl-no-title" class="save-button" type="button">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" />
+          </svg>
+          Save PNG
+        </button>
+      </div>
+      
+      <custom-chart id="demo-chart"></custom-chart>
 
-                <!-- Changed: Move the existing save button into the chart's top-right corner. -->
-                <button id="dl" class="save-button" type="button">
-                    <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" />
-                    </svg>
-                    Save PNG
-                </button>
-            </div>
+      <!-- Changed: Move the existing save button into the chart's top-right corner. -->
+      <button id="dl" class="save-button" type="button">
+        <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" />
+        </svg>
+        Save PNG
+      </button>
+    </div>
 
-            <p id="status">No data loaded.</p>
-            <p id="err"></p>
-        </main>
+    <p id="status">No data loaded.</p>
+    <p id="err"></p>
+  </main>
 
-        <script src="parser.js"></script>
-        <script type="module" src="app.js"></script>
+  <script type="module" src="app.js"></script>
 
-        <script type="module">
-            // Added: Connect the chart-type buttons to the existing app.js select.
-            const typeSelect = document.getElementById('type')
-            const chartButtons = document.querySelectorAll('[data-chart-type]')
+  <script type="module">
+    // Added: Connect the chart-type buttons to the existing app.js select.
+    const typeSelect = document.getElementById('type');
+    const chartButtons = document.querySelectorAll('[data-chart-type]');
 
-            function updateChartButtons() {
-                chartButtons.forEach((button) => {
-                    const active = button.dataset.chartType === typeSelect.value
+    function updateChartButtons() {
+      chartButtons.forEach(button => {
+        const active = button.dataset.chartType === typeSelect.value;
 
-                    button.classList.toggle('is-active', active)
-                    button.setAttribute('aria-pressed', String(active))
-                })
-            }
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+    }
 
-            chartButtons.forEach((button) => {
-                button.addEventListener('click', () => {
-                    typeSelect.value = button.dataset.chartType
-                    typeSelect.dispatchEvent(new Event('change', { bubbles: true }))
-                })
-            })
+    chartButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        typeSelect.value = button.dataset.chartType;
+        typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
 
-            typeSelect.addEventListener('change', updateChartButtons)
-            updateChartButtons()
+    typeSelect.addEventListener('change', updateChartButtons);
+    updateChartButtons();
 
-            // Added: Allow file drops on the new upload panel.
-            // Reuse the existing file-input handler without changing CSV parsing.
-            const uploadZone = document.getElementById('upload-zone')
-            const fileInput = document.getElementById('file')
+    // Added: Allow file drops on the new upload panel.
+    // Reuse the existing file-input handler without changing CSV parsing.
+    const uploadZone = document.getElementById('upload-zone');
+    const fileInput = document.getElementById('file');
 
-            ;['dragenter', 'dragover'].forEach((eventName) => {
-                uploadZone.addEventListener(eventName, (event) => {
-                    event.preventDefault()
-                    uploadZone.classList.add('is-dragging')
-                })
-            })
+    ['dragenter', 'dragover'].forEach(eventName => {
+      uploadZone.addEventListener(eventName, event => {
+        event.preventDefault();
+        uploadZone.classList.add('is-dragging');
+      });
+    });
 
-            uploadZone.addEventListener('dragleave', (event) => {
-                if (!uploadZone.contains(event.relatedTarget)) {
-                    uploadZone.classList.remove('is-dragging')
-                }
-            })
+    uploadZone.addEventListener('dragleave', event => {
+      if (!uploadZone.contains(event.relatedTarget)) {
+        uploadZone.classList.remove('is-dragging');
+      }
+    });
 
-            uploadZone.addEventListener('drop', (event) => {
-                event.preventDefault()
-                uploadZone.classList.remove('is-dragging')
+    uploadZone.addEventListener('drop', event => {
+      event.preventDefault();
+      uploadZone.classList.remove('is-dragging');
 
-                const files = event.dataTransfer?.files
-                if (!files || !files.length) return
+      const files = event.dataTransfer?.files;
+      if (!files || !files.length) return;
 
-                fileInput.files = files
-                fileInput.dispatchEvent(new Event('change', { bubbles: true }))
-            })
-        </script>
-    </body>
+      fileInput.files = files;
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  </script>
+</body>
+
 </html>
