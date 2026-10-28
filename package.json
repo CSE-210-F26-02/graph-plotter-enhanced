@@ -1,9 +1,22 @@
 {
-  "name": "graph-plotter-enhanced",
-  "private": true,
-  "description": "Client-side CSV scatter/line plotter. No build step; this file only defines the test command.",
-  "type": "module",
-  "scripts": {
-    "test": "node --test --test-reporter=spec"
-  }
+    "name": "graph-plotter-enhanced",
+    "private": true,
+    "description": "Client-side CSV scatter/line plotter. No build step; this file only defines the test, lint and formatting scripts. Vite is used to serve the files in development mode.",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "test": "node --test --test-reporter=spec",
+        "lint": "eslint . --ext .js",
+        "format": "prettier --write .",
+        "format-check": "prettier --check ."
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "eslint": "^10.13.0",
+        "globals": "^17.13.0",
+        "prettier": "^3.9.10",
+        "@playwright/test": "^1.64.1",
+        "@types/node": "^26.6.5",
+        "vite": "^8.3.5"
+    }
 }
