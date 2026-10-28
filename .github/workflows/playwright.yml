@@ -22,7 +22,7 @@ jobs:
             - name: Install Playwright Browsers
               run: npx --ignore-scripts playwright install --with-deps
             - name: Run Playwright tests
-              run:  npx --ignore-scripts test
+              run: npx --ignore-scripts test
             - uses: actions/upload-artifact@v4
               if: ${{ !cancelled() }}
               with:
