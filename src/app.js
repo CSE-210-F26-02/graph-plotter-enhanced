@@ -10,7 +10,11 @@ import { ChartElement } from './chart.js'
 const $ = (id) => document.getElementById(id)
 const chart = $('demo-chart')
 // Upgrade the chart to a ChartElement instance so we can access it methods and properties.
-if (!chart.matches(':defined')) {
+if (
+    chart &&
+    typeof chart.matches === 'function' &&
+    !chart.matches(':defined')
+) {
     ChartElement.upgrade(chart)
 }
 const isMobile = () => {

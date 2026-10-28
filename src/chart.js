@@ -579,19 +579,6 @@ class ChartElement extends HTMLElement {
         }
 
         if (closest) {
-            // Log where the mouse clicked based off canvas coordinates and the closest point to the mouse click
-
-            const canvasBoundingRect = this.#canvas.getBoundingClientRect()
-            const canvasX = e.clientX - canvasBoundingRect.left
-            const canvasY = e.clientY - canvasBoundingRect.top
-
-            console.log(
-                `Mouse clicked at (canvas coordinates): (${canvasX}, ${canvasY})`
-            )
-            console.log(
-                `Closest point to mouse click: (${closest.x}, ${closest.y})`
-            )
-
             this.#tooltip.style.display = 'block'
             this.#tooltip.style.left = `${closest.px}px`
             this.#tooltip.style.top = `${closest.py}px`
