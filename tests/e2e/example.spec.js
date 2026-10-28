@@ -61,6 +61,57 @@ const checkIfPageLoadedSuccessfully = async (page ) => {
 }
 
 /**
+ * General test setup function to load a CSV file, customize the chart, and verify the chart rendering.
+ * @param {Page} page - The Playwright page object.
+ * @param {boolean} isMobile - Indicates if the test is running on a mobile viewport.
+ * @param {import('@playwright/test').Locator} chartContainer - The locator for the chart container.
+ * @param {string} chartType - The type of chart to be generated.
+ * @param {string} title - The title to be added to the chart.
+ * @param {string} titleSize - The size of the title text.
+ * @param {string} xAxisLabel - The label for the X axis.
+ * @param {string} yAxisLabel - The label for the Y axis.
+ * @param {string} axisLabelSize - The size of the axis labels.
+ * @param {string} inputFile - The list of input files to be loaded.
+ * @param {string} screenshotFileName - The name of the screenshot file to be saved.
+ */
+const generalTestSetup = async (page, isMobile, chartContainer, chartType, title, titleSize, xAxisLabel, yAxisLabel, axisLabelSize, inputFile, screenshotFileName) => {
+        // Load a file
+    const fileInput = page.locator('input[type="file"][accept=".csv"]')
+    await fileInput.setInputFiles(inputFile)
+
+    // Add a title to the chart.
+    await page.getByLabel('Title', { exact: true }).fill(title)
+    await page.getByLabel('Title size').fill(titleSize)
+    // Add an X label to the chart.
+    await page.getByLabel('X label', { exact: true }).fill(xAxisLabel)
+    await page.getByLabel('X/Y label size').fill(axisLabelSize)
+    // Add a Y label to the chart.
+    await page.getByLabel('Y label', { exact: true }).fill(yAxisLabel)
+
+    // Switch to line chart view.
+    await page.getByRole('button', { name: chartType }).click()
+
+    // Click "Generate graph" button.
+    await page.getByRole('button', { name: 'Generate graph' }).click()
+
+    // Expect a control wrapper inside the chart container to be hidden, since the there's a title now.
+    await isMobile ? expect(chartContainer.locator('div.control-wrapper')).toBeVisible() : expect(chartContainer.locator('div.control-wrapper')).toBeHidden()
+
+    // Use playwright screenshot regression checker to capture a baseline screenshot of the chart container.
+    await expect(chartContainer).toHaveScreenshot(screenshotFileName, {
+        maxDiffPixels: 20,
+        threshold: 0.2,
+        animations: 'disabled'
+    })
+
+    const downloadPromise = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Save PNG' }).click()
+    const download = await downloadPromise
+    const downloadPath = await download.path()
+    expect(downloadPath).not.toBeNull()
+}
+
+/**
  * ### Scenario 1
 
 **User**: Bob is a small business owner who wants to visualize his sales data.
@@ -82,45 +133,14 @@ test('Scenario 1: Bob visualizes his sales data', async ({ page }) => {
     await page.goto(localUrl)
 
     const pageSize = page.viewportSize()
-    const isMobile = pageSize && pageSize.width !== undefined && pageSize.width < 768
+    const isMobile = pageSize && pageSize.width !== undefined && pageSize.width < 768 || false
 
     let { settingsPanel, chartContainer } = await checkIfPageLoadedSuccessfully(page)
 
-    // Load a file
-    const fileInput = page.locator('input[type="file"][accept=".csv"]')
-    await fileInput.setInputFiles('tests/e2e/data/sample-business-data.csv')
+    const inputFile = 'tests/e2e/data/sample-business-data.csv'
+    const screenshotFileName = 'sales-amount-vs-year.png'
+    await generalTestSetup(page, isMobile, chartContainer, 'Line', 'Sales Data', '24', 'Year', 'Sales Amount (USD)', '18', inputFile, screenshotFileName)
 
-    // Add a title to the chart.
-    await page.getByLabel('Title', { exact: true }).fill('Sales Data')
-    await page.getByLabel('Title size').fill('24')
-    // Add an X label to the chart.
-    await page.getByLabel('X label', { exact: true }).fill('Year')
-    await page.getByLabel('X/Y label size').fill('18')
-    // Add a Y label to the chart.
-    await page.getByLabel('Y label', { exact: true }).fill('Sales Amount (USD)')
-
-    // Switch to line chart view.
-    await page.getByRole('button', { name: 'Line' }).click()
-
-    // Click "Generate graph" button.
-    await page.getByRole('button', { name: 'Generate graph' }).click()
-
-    // Expect a control wrapper inside the chart container to be hidden, since the there's a title now.
-    await isMobile ? expect(chartContainer.locator('div.control-wrapper')).toBeVisible() : expect(chartContainer.locator('div.control-wrapper')).toBeHidden()
-
-    // Use playwright screenshot regression checker to capture a baseline screenshot of the chart container.
-    await expect(chartContainer).toHaveScreenshot('sales-year-over-year.png', {
-        maxDiffPixels: 20,
-        threshold: 0.2,
-        animations: 'disabled'
-    })
-
-    const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Save PNG' }).click()
-    const download = await downloadPromise
-    const downloadPath = await download.path()
-    expect(downloadPath).not.toBeNull()
-    
     await page.waitForTimeout(2000)
     
     // // Tooltip test: Hover over a data point and check if the tooltip appears with the correct information.
@@ -175,46 +195,13 @@ test('Scenario 2: Jooahn analyzes study habits and performance', async ({ page }
     await page.goto(localUrl)
 
     const pageSize = page.viewportSize()
-    const isMobile = pageSize && pageSize.width !== undefined && pageSize.width < 768
+    const isMobile = pageSize && pageSize.width !== undefined && pageSize.width < 768 || false
 
     let { chartContainer } = await checkIfPageLoadedSuccessfully(page)
 
-    // Load a file
-    const fileInput = page.locator('input[type="file"][accept=".csv"]')
-    await fileInput.setInputFiles('tests/e2e/data/sample-study-data.csv')
-
-    // Add a title to the chart.
-    await page.getByLabel('Title', { exact: true }).fill('Study Hours vs Grade')
-    await page.getByLabel('Title size').fill('24')
-    // Add an X label to the chart.
-    await page
-        .getByLabel('X label', { exact: true })
-        .fill('Number Of Study Hours')
-    await page.getByLabel('X/Y label size').fill('18')
-    // Add a Y label to the chart.
-    await page.getByLabel('Y label', { exact: true }).fill('Grade')
-
-    // Switch to Scatter chart view.
-    await page.getByRole('button', { name: 'Scatter' }).click()
-
-    // Click "Generate graph" button.
-    await page.getByRole('button', { name: 'Generate graph' }).click()
-
-    // Expect a control wrapper inside the chart container to be hidden, since the there's a title now.
-    await isMobile ? expect(chartContainer.locator('div.control-wrapper')).toBeVisible() : expect(chartContainer.locator('div.control-wrapper')).toBeHidden()
-
-    // Use playwright screenshot regression checker to capture a baseline screenshot of the chart container.
-    await expect(chartContainer).toHaveScreenshot('study-hours-vs-grade.png', {
-        maxDiffPixels: 20,
-        threshold: 0.2,
-        animations: 'disabled'
-    })
-
-    const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Save PNG' }).click()
-    const download = await downloadPromise
-    const downloadPath = await download.path()
-    expect(downloadPath).not.toBeNull()
+    const inputFile = 'tests/e2e/data/sample-study-data.csv'
+    const screenshotFileName = 'study-hours-vs-grades.png'
+    await generalTestSetup(page, isMobile, chartContainer, 'Scatter', 'Study Hours vs Grades', '24', 'Study Hours', 'Grades', '18', inputFile, screenshotFileName)
 })
 
 /** End of test scenario */
@@ -240,42 +227,14 @@ test('Scenario 3: Aster creates a scatter plot for her research data', async ({ 
     await page.goto(localUrl)
 
     const pageSize = page.viewportSize()
-    const isMobile = pageSize && pageSize.width !== undefined && pageSize.width < 768
+    const isMobile = pageSize && pageSize.width !== undefined && pageSize.width < 768 || false
 
     let { chartContainer } = await checkIfPageLoadedSuccessfully(page)
 
-    // Load a file
-    const fileInput = page.locator('input[type="file"][accept=".csv"]')
-    await fileInput.setInputFiles('tests/e2e/data/sample-biology-data.csv')
 
-    // Add a title to the chart.
-    await page
-        .getByLabel('Title', { exact: true })
-        .fill('DNA Growth in a Controlled Laboratory Environment')
-    await page.getByLabel('Title size').fill('24')
-    // Add an X label to the chart.
-    await page.getByLabel('X label', { exact: true }).fill('Time (hours)')
-    await page.getByLabel('X/Y label size').fill('18')
-    // Add a Y label to the chart.
-    await page
-        .getByLabel('Y label', { exact: true })
-        .fill('DNA Concentration in Solution (M)')
-
-    // Switch to Scatter chart view.
-    await page.getByRole('button', { name: 'Scatter' }).click()
-
-    // Click "Generate graph" button.
-    await page.getByRole('button', { name: 'Generate graph' }).click()
-
-    // Expect a control wrapper inside the chart container to be hidden, since the there's a title now.
-    await isMobile ? expect(chartContainer.locator('div.control-wrapper')).toBeVisible() : expect(chartContainer.locator('div.control-wrapper')).toBeHidden()
-
-    // Use playwright screenshot regression checker to capture a baseline screenshot of the chart container.
-    await expect(chartContainer).toHaveScreenshot('dna-growth-in-lab.png', {
-        maxDiffPixels: 20,
-        threshold: 0.2,
-        animations: 'disabled'
-    })
+    const inputFile = 'tests/e2e/data/sample-biology-data.csv'
+    const screenshotFileName = 'dna-growth-in-lab.png'
+    await generalTestSetup(page, isMobile, chartContainer, 'Scatter', 'DNA Growth in a Controlled Laboratory Environment', '24', 'Time (hours)', 'DNA Concentration in Solution (M)', '18', inputFile, screenshotFileName)
 
     // Zoom in on the chart.
     // Get canvas component inside the custom-chart element.
