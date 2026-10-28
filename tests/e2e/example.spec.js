@@ -295,7 +295,7 @@ test('Scenario 4: Sammy visualizes his fitness progress over time', async ({ pag
     await page.goto(localUrl)
 
     const pageSize = page.viewportSize()
-    const isMobile = pageSize && pageSize.width !== undefined && pageSize.width < 768
+    const isMobile = pageSize && pageSize.width !== undefined && pageSize.width < 768 || false
 
     let { chartContainer } = await checkIfPageLoadedSuccessfully(page)
 
@@ -317,38 +317,8 @@ test('Scenario 4: Sammy visualizes his fitness progress over time', async ({ pag
     await expect(page.locator('#err')).toHaveText(
         'Need at least two numeric columns.'
     )
-
-    // Load a valid CSV file.
-    await fileInput.setInputFiles('tests/e2e/data/sample-fitness-data.csv')
-
-    // Add a title to the chart.
-    await page.getByLabel('Title', { exact: true }).fill('Fitness Progress')
-    await page.getByLabel('Title size').fill('24')
-    // Add an X label to the chart.
-    await page.getByLabel('X label', { exact: true }).fill('Days Since Fitness Training')
-    await page.getByLabel('X/Y label size').fill('18')
-    // Add a Y label to the chart.
-    await page.getByLabel('Y label', { exact: true }).fill('Steps')
-
-    // Switch to Line chart view.
-    await page.getByRole('button', { name: 'Line' }).click()
-
-    // Click "Generate graph" button.
-    await page.getByRole('button', { name: 'Generate graph' }).click()
-
-    // Expect a control wrapper inside the chart container to be hidden, since the there's a title now.
-    await isMobile ? expect(chartContainer.locator('div.control-wrapper')).toBeVisible() : expect(chartContainer.locator('div.control-wrapper')).toBeHidden()
-
-    // Use playwright screenshot regression checker to capture a baseline screenshot of the chart container.
-    await expect(chartContainer).toHaveScreenshot('fitness-progress.png', {
-        maxDiffPixels: 20,
-        threshold: 0.2,
-        animations: 'disabled'
-    })
-
-    const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Save PNG' }).click()
-    const download = await downloadPromise
-    const downloadPath = await download.path()
-    expect(downloadPath).not.toBeNull()
+    
+    const inputFile = 'tests/e2e/data/sample-fitness-data.csv'
+    const screenshotFileName = 'fitness-progress.png'
+    await generalTestSetup(page, isMobile, chartContainer, 'Line', 'Fitness Progress', '24', 'Days Since Fitness Training', 'Steps', '18', inputFile, screenshotFileName)
 })
