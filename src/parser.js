@@ -41,7 +41,7 @@ function parseCSV(text) {
                         if (out.length === 0) {
                             // Only throw error for the header row
                             throw new MalformedCSVError(
-                                'Unclosed quote in CSV line: ' + line
+                                'Unclosed quote in CSV header line: ' + line
                             )
                         } else {
                             // Skip this line completely if it's not the first line (header) and just log a warning

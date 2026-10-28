@@ -13,9 +13,13 @@ const chart = $('demo-chart')
 if (!chart.matches(':defined')) {
     ChartElement.upgrade(chart)
 }
+const isMobile = () => {
+    const pageSize = window.innerWidth
+    return pageSize && pageSize < 768
+}
 
 const showWhichSaveButton = () => {
-    if ($('title').value.trim() === '') {
+    if ($('title').value.trim() === '' || isMobile()) {
         document.querySelector('.control-wrapper').style.display = 'flex'
         document.querySelector('#dl:not(.control-wrapper #dl)').style.display =
             'none'

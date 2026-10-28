@@ -1,4 +1,5 @@
 // @ts-check
+/* global process */
 import { defineConfig, devices } from '@playwright/test'
 
 /**
@@ -37,7 +38,7 @@ export default defineConfig({
         command: 'npm run dev',
         url: 'http://localhost:5173',
         reuseExistingServer: !process.env.CI,
-        stdout: 'ignore',
+        stdout: 'pipe',
         stderr: 'pipe',
     },
 
@@ -59,14 +60,14 @@ export default defineConfig({
         },
 
         /* Test against mobile viewports. */
-        // {
-        //   name: 'Mobile Chrome',
-        //   use: { ...devices['Pixel 5'] },
-        // },
-        // {
-        //   name: 'Mobile Safari',
-        //   use: { ...devices['iPhone 12'] },
-        // },
+        {
+            name: 'Mobile Chrome',
+            use: { ...devices['Pixel 5'] },
+        },
+        {
+            name: 'Mobile Safari',
+            use: { ...devices['iPhone 12'] },
+        },
 
         /* Test against branded browsers. */
         // {
