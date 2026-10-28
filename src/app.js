@@ -190,7 +190,7 @@ $('sample').onclick = () => {
     load(csv, 'sample.csv')
 }
 
-/* Resize handler */['xs', 'ys', 'type'].forEach(
+/* Resize handler */ ;['xs', 'ys', 'type'].forEach(
     (id) =>
         ($(id).onchange = () => {
             // Different columns have a different range, so start from the full view
