@@ -163,7 +163,7 @@ test('Scenario 1: Bob visualizes his sales data', async ({ page }) => {
     await settingsPanel.getByLabel('Y axis').selectOption('Profit')
     await page.getByRole('button', { name: 'Generate graph' }).click()
     await expect(chartContainer).toHaveScreenshot(
-        'sales-amount-vs-year.png',
+        'sales-amount-vs-year-profit.png',
         {
             maxDiffPixels: 20,
             threshold: 0.2,
@@ -317,7 +317,7 @@ test('Scenario 4: Sammy visualizes his fitness progress over time', async ({ pag
     await expect(page.locator('#err')).toHaveText(
         'Need at least two numeric columns.'
     )
-    
+
     const inputFile = 'tests/e2e/data/sample-fitness-data.csv'
     const screenshotFileName = 'fitness-progress.png'
     await generalTestSetup(page, isMobile, chartContainer, 'Line', 'Fitness Progress', '24', 'Days Since Fitness Training', 'Steps', '18', inputFile, screenshotFileName)
